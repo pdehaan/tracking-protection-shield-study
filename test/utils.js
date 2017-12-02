@@ -33,6 +33,9 @@ const FIREFOX_PREFERENCES = {
   // NECESSARY for all 57+ builds
   "extensions.legacy.enabled": true,
 
+  // Temporarily installed addons can break due to sandbox, see Bug #1423687
+  "security.sandbox.content.level": 2,
+
   /** WARNING: gecko webdriver sets many additional prefs at:
     * https://dxr.mozilla.org/mozilla-central/source/testing/geckodriver/src/prefs.rs
     *
