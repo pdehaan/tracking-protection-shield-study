@@ -8,6 +8,7 @@
       "eslint:recommended"
     ],
     "rules": {
-      "no-console": "warn"
+      "no-console": "warn",
+      "max-len": ["error", 80],
     }
 }
