@@ -11,6 +11,16 @@ Cu.import("resource://gre/modules/Log.jsm");
 Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 
+// Create a new instance of the ConsoleAPI so we can control the maxLogLevel with Config.jsm.
+XPCOMUtils.defineLazyGetter(this, "log", () => {
+  const ConsoleAPI = Cu.import("resource://gre/modules/Console.jsm", {}).ConsoleAPI;
+  const consoleOptions = {
+    maxLogLevel: config.log.bootstrap.level,
+    prefix: "TPStudy",
+  };
+  return new ConsoleAPI(consoleOptions);
+});
+
 const CONFIGPATH = `${__SCRIPT_URI_SPEC__}/../Config.jsm`;
 const { config } = Cu.import(CONFIGPATH, {});
 
