@@ -4,12 +4,10 @@
 /* global Feature, Services */ // Cu.import
 /* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(startup|shutdown|install|uninstall)" }]*/
 
-//TODO bdanforth: Fix bootstrap log; submit patch to ssat
-
 const { classes: Cc, interfaces: Ci, utils: Cu } = Components;
-Cu.import("resource://gre/modules/Log.jsm");
-Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
+XPCOMUtils.defineLazyModuleGetter(this, "Services",
+  "resource://gre/modules/Services.jsm");
 
 // Create a new instance of the ConsoleAPI so we can control the maxLogLevel with Config.jsm.
 XPCOMUtils.defineLazyGetter(this, "log", () => {
@@ -28,54 +26,30 @@ const STUDYUTILSPATH = `${__SCRIPT_URI_SPEC__}/../${config.studyUtilsPath}`;
 const { studyUtils } = Cu.import(STUDYUTILSPATH, {});
 
 const REASONS = studyUtils.REASONS;
-const UI_AVAILABLE_NOTIFICATION = "sessionstore-windows-restored";
+const UI_AVAILABLE_NOTIFICATION = "browser-delayed-startup-finished";
 
-// QA NOTE: Study Specific Modules - package.json:addon.chromeResource
-const BASE = `button-icon-preference`;
+// Study-specific modules
+const BASE = "tracking-protection-messaging";
 XPCOMUtils.defineLazyModuleGetter(this, "Feature", `resource://${BASE}/lib/Feature.jsm`);
-
-
-/* Example addon-specific module imports.  Remember to Unload during shutdown!
-
-  // https://developer.mozilla.org/en-US/docs/Mozilla/JavaScript_code_modules/Using
-
-
-   Ideally, put ALL your feature code in a Feature.jsm file,
-   NOT in this bootstrap.js.
-
-  const BASE=`template-shield-study`;
-  XPCOMUtils.defineLazyModuleGetter(this, "SomeExportedSymbol",
-    `resource://${BASE}/SomeModule.jsm");
-
-  XPCOMUtils.defineLazyModuleGetter(this, "Preferences",
-    "resource://gre/modules/Preferences.jsm");
-*/
-
-// Create a new instance of the ConsoleAPI so we can control the maxLogLevel.
-XPCOMUtils.defineLazyGetter(this, "log", () => {
-  const ConsoleAPI = Cu.import("resource://gre/modules/Console.jsm", {}).ConsoleAPI;
-  const consoleOptions = {
-    maxLogLevel: config.log.bootstrap.level,
-    prefix: "TPStudy",
-  };
-  return new ConsoleAPI(consoleOptions);
-});
 
 this.Bootstrap = {
   async startup(addonData, reason) {
+    // TODO bdanforth: Turn off TP always just in case before applying treatments
 
+    // Randomize frame script URL due to bug 1051238. TODO bdanforth add ?${Math.random()}
+    this.FRAME_SCRIPT_URL = `resource://${BASE}/content/new-tab-variation.js`;
     // validate study config
     studyUtils.setup({...config, addon: { id: addonData.id, version: addonData.version }});
     // TODO bdanforth: patch studyUtils to setLoggingLevel as part of setup method
     studyUtils.setLoggingLevel(config.log.studyUtils.level);
 
+    // choose and set variation
+    const variation = await this.selectVariation();
+
     // if addon was just installed, check if user is eligible as specified in Config.jsm
     if ((REASONS[reason]) === "ADDON_INSTALL" && await !this.isEligible(reason)) {
       return;
     }
-
-    // choose and set variation
-    const variation = await this.selectVariation();
 
     /*
     * Adds the study to the active list of telemetry experiments, and sends the "installed"
@@ -96,6 +70,7 @@ this.Bootstrap = {
     if (!Services.wm.getMostRecentWindow("navigator:browser")) {
       Services.obs.addObserver(this, UI_AVAILABLE_NOTIFICATION);
     } else {
+      // TODO bdanforth: check if window is private before adding UI
       this.addFeature(variation, reason);
     }
   },
@@ -109,6 +84,17 @@ this.Bootstrap = {
     log.debug("shutdown", REASONS[reason] || reason);
     // FRAGILE: handle uninstalls initiated by USER or by addon
     if (reason === REASONS.ADDON_UNINSTALL || reason === REASONS.ADDON_DISABLE) {
+      // ensure the frame script is not loaded into any new tabs
+      Services.mm.removeDelayedFrameScript(this.FRAME_SCRIPT_URL);
+      // TODO bdanforth: disable frame scripts already loaded
+      /*
+      * There is no mechanism to unload frame scripts which are already loaded.
+      * You need to send a message to your frame scripts, telling them to disable
+      * themselves; for example, by undoing any changes they've made or removing
+      * any event listeners.
+      * Note: Frame scripts are automatically unloaded on tab close.
+      */
+
       log.debug("uninstall or disable");
       if (!studyUtils._isEnding) {
         // we are the first 'uninstall' requestor => must be user action.
@@ -140,14 +126,12 @@ this.Bootstrap = {
   observe(subject, topic, data) {
     if (topic === UI_AVAILABLE_NOTIFICATION) {
       Services.obs.removeObserver(this, UI_AVAILABLE_NOTIFICATION);
-      this.onBrowserReady();
+      this.addFeature();
     }
   },
 
   addFeature(variation, reason) {
-    // TODO bdanforth: load frame script in Feature.init
-    // Services.mm.loadFrameScript("resource://tracking-protection-study/tracking-study-content.js", true);
-    // Feature.init();
+    Services.mm.loadFrameScript(this.FRAME_SCRIPT_URL, true);
     // Start up your feature, with specific variation info.
     this.feature = new Feature({variation, studyUtils, reasonName: REASONS[reason]});
   },
