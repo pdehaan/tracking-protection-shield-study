@@ -1,7 +1,6 @@
 "use strict";
 
-/* global  __SCRIPT_URI_SPEC__  */
-/* global Feature, Services */ // Cu.import
+/* global Feature, Services __SCRIPT_URI_SPEC__ */
 /* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(startup|shutdown|install|uninstall)" }]*/
 
 const { classes: Cc, interfaces: Ci, utils: Cu } = Components;
@@ -134,6 +133,7 @@ this.Bootstrap = {
     Services.mm.loadFrameScript(this.FRAME_SCRIPT_URL, true);
     // Start up your feature, with specific variation info.
     this.feature = new Feature({variation, studyUtils, reasonName: REASONS[reason]});
+    this.feature.init();
   },
 
   /** addon_install ONLY:
