@@ -2,6 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+// @QUESTION: What would you say is done/left to do? (let's go through the TODOs left by rhelmer)
+// @QUESTION: (If I get a chance to look into it in advance) Why is Issue #6 (counter resetting) happening?
+
 "use strict";
 
 /* global blocklists */
@@ -80,7 +83,17 @@ class Feature {
   }
 
   /**
+   *  TODO bdanforth: merge with showIntroPanel method
+   * change this to be the intro doorhanger
+   * (has different content than the doorhanger that shows when
+   * the user clicks the pageAction button).
    * Open doorhanger-style notification on desired chrome window.
+   * Note: this doorhanger is different (id=DOORHANGER_ID)
+   * than the doorhanger that appears when the pageAction button
+   * is clicked in the `showPageAction` method.
+   * (id="tracking-protection-study-panel")
+   * Note: This method is currently called on Feature.init() IFF
+   * the treatment is "doorhanger".
    *
    * @param {ChromeWindow} win
    * @param {String} message
@@ -97,19 +110,38 @@ class Feature {
     const action = {
       label: "Got it!",
       accessKey: "G",
-      callback: () => {},
+      callback: function() {
+        console.log(`You clicked the button.`);
+      },
     };
 
-    win.PopupNotifications.show(win.gBrowser.selectedBrowser, DOORHANGER_ID, message,
-      null, action, [], options);
+    // Note: With "npm run firefox", panel does not open correctly without a delay
+    // @QUESTION rhelmer: Why?
+    win.requestIdleCallback(() => {
+      win.PopupNotifications.show(
+        win.gBrowser.selectedBrowser,
+        DOORHANGER_ID,
+        message,
+        null,
+        action,
+        [],
+        options
+      );
+    });
   }
 
+  // @QUESTION rhelmer: This method is called if event occurs from:
+  // Services.wm.addListener(this) in init()
+  // Adds event listeners to newly created windows
   onOpenWindow(xulWindow) {
     var win = xulWindow.QueryInterface(Ci.nsIInterfaceRequestor)
       .getInterface(Ci.nsIDOMWindowInternal || Ci.nsIDOMWindow);
     win.addEventListener("load", () => this.addEventListeners(win), {once: true});
   }
 
+  // @QUESTION rhelmer: This method is called if event occurs from:
+  // Services.wm.addListener(this) in init()
+  // What is the "if" statement checking for?
   onLocationChange(browser, progress, request, uri, flags) {
     if (this.state.blockedResources.has(browser)) {
       this.showPageAction(browser.getRootNode(), 0);
@@ -118,6 +150,11 @@ class Feature {
     }
   }
 
+  /**
+  * Called when the browser is about to make a network request.
+  * @returns {BlockingResponse} object (determines whether or not
+  * the request should be cancelled)
+  */
   onBeforeRequest(details) {
     if (details && details.url && details.browser) {
       const browser = details.browser;
@@ -169,6 +206,8 @@ class Feature {
         const enumerator = Services.wm.getEnumerator("navigator:browser");
         while (enumerator.hasMoreElements()) {
           const win = enumerator.getNext();
+          // Mac OS has an application window that keeps running even if all
+          // normal Firefox windows are closed.
           if (win === Services.appShell.hiddenDOMWindow) {
             continue;
           }
@@ -278,6 +317,10 @@ class Feature {
     }
   }
 
+  /**
+  * Called when a non-focused tab is selected.
+  * @QUESTION rhelmer: What does this method do exactly?
+  */
   onTabChange(evt) {
     const win = evt.target.ownerGlobal;
     const currentURI = win.gBrowser.currentURI;
@@ -288,6 +331,8 @@ class Feature {
 
     const currentWin = Services.wm.getMostRecentWindow("navigator:browser");
 
+    // @QUESTION rhelmer: What is this "if" statement telling us here? That the
+    // window that was changed to is of type "navigator:browser"?
     if (win === currentWin) {
       this.hidePageAction(win.document);
       const counter = this.state.blockedResources.get(win.gBrowser.selectedBrowser);
@@ -299,6 +344,11 @@ class Feature {
     }
   }
 
+  /**
+  * Called when any page loads
+  * Loads content into a new tab page with tracking protection data that
+  * varies by which treatment/messaging the user should be receiving.
+  */
   onPageLoad(evt) {
     const win = evt.target.ownerGlobal;
     const currentURI = win.gBrowser.currentURI;
@@ -345,6 +395,9 @@ class Feature {
 
   /**
    * Open URL in new tab on desired chrome window.
+   * TODO bdanforth: Remove this method; as we are no longer
+   * using a first-run page first run page
+   * Currently opens at "resource://tracking-protection-study/firstrun.html"
    *
    * @param {ChromeWindow} win
    * @param {String} message
@@ -359,15 +412,16 @@ class Feature {
   }
 
   async init() {
-
+    // TODO bdanforth: get treatment(s) from bootstrap/studyUtils
     // define treatments as STRING: fn(browserWindow, url)
     this.TREATMENTS = {
-      doorhanger: this.openDoorhanger,
-      opentab: this.openURL,
+      doorhanger: this.openDoorhanger, // opens a doorhanger on addon startup
+      opentab: this.openURL, // opens a focused new tab at a specified URL on addon startup
     };
 
-    // TODO hardcode for the moment, but get from distribution ID instead
-    this.treatment = "opentab";
+    // TODO bdanforth: hardcode for the moment, but get from studyUtils instead
+    // TODO bdanforth: remove distribution_id, firstrun, and other UI we are not implementing
+    this.treatment = "doorhanger";
     this.distribution_id = "test123";
     let newtab_messages = [
       "Firefox blocked ${blockedRequests} trackers today<br/> from ${blockedEntities} companies that track your browsing",
@@ -428,6 +482,8 @@ class Feature {
     }
 
     // Attach to any new windows.
+    // Depending on which event happens (ex: onOpenWindow, onLocationChange),
+    // it will call that listener method that exists on "this"
     Services.wm.addListener(this);
   }
 
@@ -444,6 +500,7 @@ class Feature {
 
   /**
    * Listen and process events from content.
+   * TODO bdanforth: merge with "handleMessageFromContent" method
    */
   initContentMessageListener() {
     Services.mm.addMessageListener("TrackingStudy:OnContentMessage", msg => {
@@ -487,6 +544,7 @@ class Feature {
   }
 
   /**
+    * TODO bdanforth: merge with openDoorhanger method
     *   Display instrumented 'introductory panel' explaining the feature to the user
     *
     *   Telemetry Probes:
