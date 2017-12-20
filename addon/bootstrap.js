@@ -59,12 +59,6 @@ this.Bootstrap = {
     // log what the study variation and other info is.
     log.debug(`info ${JSON.stringify(studyUtils.info())}`);
 
-    // IFF the study has an embedded webExtension, start it.
-    const { webExtension } = addonData;
-    if (webExtension) {
-      await this.startupWebExtension(webExtension);
-    }
-
     // make sure the UI is available before adding the feature
     if (!Services.wm.getMostRecentWindow("navigator:browser")) {
       Services.obs.addObserver(this, UI_AVAILABLE_NOTIFICATION);
@@ -133,7 +127,6 @@ this.Bootstrap = {
     Services.mm.loadFrameScript(this.FRAME_SCRIPT_URL, true);
     // Start up your feature, with specific variation info.
     this.feature = new Feature({variation, studyUtils, reasonName: REASONS[reason]});
-    this.feature.init();
   },
 
   /** addon_install ONLY:
@@ -151,17 +144,6 @@ this.Bootstrap = {
       await studyUtils.endStudy({reason: "ineligible"});
     }
     return isEligible;
-  },
-
-  async startupWebExtension(webExtension) {
-    webExtension.startup().then(api => {
-      const {browser} = api;
-      /** spec for messages intended for Shield =>
-        * {shield:true,msg=[info|endStudy|telemetry],data=data}
-        */
-      browser.runtime.onMessage.addListener(studyUtils.respondToWebExtensionMessage);
-      // other browser.runtime.onMessage handlers for your addon, if any
-    });
   },
 
   // choose the variation for this particular user, then set it.

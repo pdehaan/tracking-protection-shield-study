@@ -73,33 +73,39 @@ class Feature {
   constructor({variation, studyUtils, reasonName}) {
     this.variation = variation;
     this.studyUtils = studyUtils;
-    // TODO bdanforth: merge rhelmer's init() method with constructor method
-    // this.addListeners();
-
-    // only during INSTALL
-    if (reasonName === "ADDON_INSTALL") {
-      this.showIntroPanel();
-    }
+    this.reasonName = reasonName;
+    this.addContentMessageListeners();
+    this.init(variation.name);
   }
 
   /**
-   *  TODO bdanforth: merge with showIntroPanel method
-   * change this to be the intro doorhanger
-   * (has different content than the doorhanger that shows when
-   * the user clicks the pageAction button).
-   * Open doorhanger-style notification on desired chrome window.
-   * Note: this doorhanger is different (id=DOORHANGER_ID)
-   * than the doorhanger that appears when the pageAction button
-   * is clicked in the `showPageAction` method.
-   * (id="tracking-protection-study-panel")
-   * Note: This method is currently called on Feature.init() IFF
-   * the treatment is "doorhanger".
-   *
-   * @param {ChromeWindow} win
-   * @param {String} message
-   * @param {String} url
-   */
-  openDoorhanger(win, message, url) {
+  *   Display instrumented 'introductory panel' explaining the feature to the user
+  *   Telemetry Probes: (TODO bdanforth: add telemetry probes)
+  *   - {event: introduction-shown}
+  *   - {event: introduction-accept}
+  *   - {event: introduction-leave-study}
+  *    Note:  Panel WILL NOT SHOW if the only window open is a private window.
+  *
+  * Shows the intro doorhanger
+  * (has different content than the doorhanger that shows when
+  * the user clicks the pageAction button).
+  * Open doorhanger-style notification on desired chrome window.
+  * Note: this doorhanger is different (id=DOORHANGER_ID)
+  * than the doorhanger that appears when the pageAction button
+  * is clicked in the `showPageAction` method.
+  * (id="tracking-protection-study-panel")
+  * Note: This method is currently called on Feature.init()
+  *
+  * @param {ChromeWindow} win
+  * @param {String} message
+  * @param {String} url
+  */
+  showIntroPanel(win, message, url) {
+    // Only show intro panel when the addon was just installed
+    if (this.reasonName !== "ADDON_INSTALL") {
+      return;
+    }
+
     const options = {
       popupIconURL: DOORHANGER_ICON,
       learnMoreURL: url,
@@ -117,7 +123,7 @@ class Feature {
 
     // Note: With "npm run firefox", panel does not open correctly without a delay
     // @QUESTION rhelmer: Why?
-    win.requestIdleCallback(() => {
+    win.setTimeout(() => {
       win.PopupNotifications.show(
         win.gBrowser.selectedBrowser,
         DOORHANGER_ID,
@@ -127,22 +133,29 @@ class Feature {
         [],
         options
       );
-    });
+    }, 1000);
   }
 
   // @QUESTION rhelmer: This method is called if event occurs from:
   // Services.wm.addListener(this) in init()
-  // Adds event listeners to newly created windows
+  // Adds event listeners to newly created windows (browser application window)
+  // This method is NOT called when opening a new tab.
   onOpenWindow(xulWindow) {
+    console.log("onOpenWindow fired");
     var win = xulWindow.QueryInterface(Ci.nsIInterfaceRequestor)
       .getInterface(Ci.nsIDOMWindowInternal || Ci.nsIDOMWindow);
-    win.addEventListener("load", () => this.addEventListeners(win), {once: true});
+    win.addEventListener("load", () => this.addWindowEventListeners(win), {once: true});
   }
 
   // @QUESTION rhelmer: This method is called if event occurs from:
-  // Services.wm.addListener(this) in init()
-  // What is the "if" statement checking for?
+  // Services.wm.addListener(this) in init() and addWindowEventListeners()
+  // from addTabsProgressListener
+  // This method is called when opening a new tab.
+  // Not appropriate for modifying the page itself because the page hasn't finished
+  // loading yet. https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIWebProgressListener
   onLocationChange(browser, progress, request, uri, flags) {
+    console.log("onLocationChange fired");
+    // if tracking protection has blocked any resources for this page
     if (this.state.blockedResources.has(browser)) {
       this.showPageAction(browser.getRootNode(), 0);
       this.setPageActionCounter(browser.getRootNode(), 0);
@@ -295,7 +308,7 @@ class Feature {
     button.setAttribute("id", "tracking-protection-study-button");
     button.setAttribute("image", "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled");
     button.append(panel);
-    button.addEventListener("command", event => {
+    button.addEventListener("command", () => {
       doc.getElementById("panel");
       panel.openPopup(button);
     });
@@ -331,8 +344,8 @@ class Feature {
 
     const currentWin = Services.wm.getMostRecentWindow("navigator:browser");
 
-    // @QUESTION rhelmer: What is this "if" statement telling us here? That the
-    // window that was changed to is of type "navigator:browser"?
+    // If user changes tabs but stays within current window we want to update the status
+    // of the pageAction, then reshow it if the new page has had any resources blocked.
     if (win === currentWin) {
       this.hidePageAction(win.document);
       const counter = this.state.blockedResources.get(win.gBrowser.selectedBrowser);
@@ -344,100 +357,35 @@ class Feature {
     }
   }
 
-  /**
-  * Called when any page loads
-  * Loads content into a new tab page with tracking protection data that
-  * varies by which treatment/messaging the user should be receiving.
-  */
-  onPageLoad(evt) {
-    const win = evt.target.ownerGlobal;
-    const currentURI = win.gBrowser.currentURI;
-    if (currentURI.spec === "about:newtab" || currentURI.spec === "about:home") {
-      const doc = win.gBrowser.contentDocument;
-      if (doc.getElementById("tracking-protection-message")) {
-        return;
-      }
-      const minutes = this.state.timeSaved / 1000 / 60;
-      // FIXME commented out for testing
-      // if (minutes >= 1 && this.blockedRequests) {
-      if (this.state.totalBlockedResources) {
-        let message = this.newtab_message;
-        message = message.replace("${blockedRequests}", this.state.totalBlockedResources);
-        message = message.replace("${blockedEntities}", this.state.totalBlockedEntities.size);
-        message = message.replace("${blockedSites}", this.state.totalBlockedSites);
-        message = message.replace("${minutes}", minutes.toPrecision(3));
+  async init(treatment) {
 
-        const logo = doc.createElement("img");
-        logo.src = "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled";
-        logo.style.height = 48;
-        logo.style.width = 48;
-        logo.style.float = "left";
-        logo.style.padding = "5px";
-
-        const span = doc.createElement("span");
-        span.style.fontSize = "24px";
-        span.style.fontWeight = "lighter";
-        span.style.float = "right";
-        span.style.padding = "5px";
-        span.textContent = message;
-
-        const newContainer = doc.createElement("div");
-        newContainer.id = "tracking-protection-message";
-        newContainer.style.padding = "24px";
-        newContainer.append(logo);
-        newContainer.append(span);
-
-        const container = doc.getElementById("onboarding-overlay-button");
-        container.append(newContainer);
-      }
-    }
-  }
-
-  /**
-   * Open URL in new tab on desired chrome window.
-   * TODO bdanforth: Remove this method; as we are no longer
-   * using a first-run page first run page
-   * Currently opens at "resource://tracking-protection-study/firstrun.html"
-   *
-   * @param {ChromeWindow} win
-   * @param {String} message
-   * @param {String} url
-   * @param {bool} foreground - true if this tab should open in the foreground.
-   */
-  openURL(win, message, url, foreground = true) {
-    const tab = win.gBrowser.addTab(url);
-    if (foreground) {
-      win.gBrowser.selectedTab = tab;
-    }
-  }
-
-  async init() {
     // TODO bdanforth: get treatment(s) from bootstrap/studyUtils
     // define treatments as STRING: fn(browserWindow, url)
     this.TREATMENTS = {
-      doorhanger: this.openDoorhanger, // opens a doorhanger on addon startup
-      opentab: this.openURL, // opens a focused new tab at a specified URL on addon startup
+      fast: this.showIntroPanel.bind(this), // opens a doorhanger on addon install only
+      private: this.showIntroPanel.bind(this),
+      adBlocking: this.showIntroPanel.bind(this),
     };
 
-    // TODO bdanforth: hardcode for the moment, but get from studyUtils instead
-    // TODO bdanforth: remove distribution_id, firstrun, and other UI we are not implementing
-    this.treatment = "doorhanger";
-    this.distribution_id = "test123";
-    let newtab_messages = [
+    this.treatment = treatment;
+    // TODO bdanforth: update newtab messages copy
+    const newtab_messages = [
       "Firefox blocked ${blockedRequests} trackers today<br/> from ${blockedEntities} companies that track your browsing",
       "Firefox blocked ${blockedRequests} trackers today<br/> and saved you ${minutes} minutes",
-      "Firefox blocked ${blockedRequests} ads today from<br/> ${blockedSites} different websites"
+      "Firefox blocked ${blockedRequests} ads today from<br/> ${blockedSites} different websites",
     ];
-    let firstrun_urls = [
-      "resource://tracking-protection-study/firstrun.html",
+    // TODO bdanforth: update with final URLs
+    const learnMore_urls = [
+      "http://www.mozilla.com",
     ];
-    this.newtab_message = newtab_messages[0];
-    this.message = "ok";
-    this.url = firstrun_urls[0];
+    // TODO bdanforth: update intro panel message copy
+    this.message = "Tracking protection is great! Would you like to participate in a study?";
+    this.url = learnMore_urls[0];
 
     // run once now on the most recent window.
     let win = Services.wm.getMostRecentWindow("navigator:browser");
 
+    // TODO bdanforth: remove if there is no "ALL" treatment, ultimately
     if (this.treatment === "ALL") {
       Object.keys(this.TREATMENTS).forEach((key, index) => {
         if (Object.prototype.hasOwnProperty.call(this.TREATMENTS, key)) {
@@ -449,13 +397,16 @@ class Feature {
     }
 
     this.state = {
+      // TODO bdanforth: choose message based on treatment branch
+      newTabMessage: newtab_messages[0],
       timeSave: 0,
       blocklist: new Map(),
       allowedHosts: new Set(),
       reportedHosts: {},
       entityList: {},
       blockedResources: new Map(),
-      totalBlockedResources: 0,
+      // TODO bdanforth: reset to 0 after testing
+      totalBlockedResources: 1,
       totalAllowedResources: 0,
       totalBlockedEntities: new Set(),
     };
@@ -478,7 +429,7 @@ class Feature {
         continue;
       }
 
-      this.addEventListeners(win);
+      this.addWindowEventListeners(win);
     }
 
     // Attach to any new windows.
@@ -487,31 +438,27 @@ class Feature {
     Services.wm.addListener(this);
   }
 
-  addEventListeners(win) {
-    this.onTabChange = this.onTabChange.bind(this);
-    this.onPageLoad = this.onPageLoad.bind(this);
-
+  /**
+  * Three cases of user looking at diff page:
+      - switched windows (onOpenWindow)
+      - loading new pages in the same tab (onPageLoad/Frame script)
+      - switching tabs but not switching windows (tabSelect)
+    Each one needs its own separate handler, because each one is detected by its own
+    separate event.
+  * @param {ChromeWindow} win
+  */
+  addWindowEventListeners(win) {
     if (win && win.gBrowser) {
       win.gBrowser.addTabsProgressListener(this);
-      win.gBrowser.tabContainer.addEventListener("TabSelect", this.onTabChange);
-      win.addEventListener("load", this.onPageLoad);
+      win.gBrowser.tabContainer.addEventListener("TabSelect", this.onTabChange.bind(this));
+      // TODO bdanforth: Remove this listener after asking rhelmer about it; now essentially the same
+      // as "addContentToNewTab" method in frame script.
+      // @QUESTION rhelmer: This "load" event is not firing on page loads
+      // Does each webpages load event bubble up to parent window?
+      // At this point, when the parent window has loaded, what is the appropriate listener
+      // to register to say when a page in this browser has finished loading and can be modified?
+      // win.addEventListener("load", () => this.onPageLoad);
     }
-  }
-
-  /**
-   * Listen and process events from content.
-   * TODO bdanforth: merge with "handleMessageFromContent" method
-   */
-  initContentMessageListener() {
-    Services.mm.addMessageListener("TrackingStudy:OnContentMessage", msg => {
-      switch (msg.data.action) {
-        case "get-totals":
-          msg.target.messageManager.sendAsyncMessage("TrackingStudy:Totals", {
-            totalBlockedResources: this.state.totalBlockedResources,
-          });
-          break;
-      }
-    });
   }
 
   uninit() {
@@ -543,27 +490,7 @@ class Feature {
     Cu.unload("resource://tracking-protection-study/BlockLists.jsm");
   }
 
-  /**
-    * TODO bdanforth: merge with openDoorhanger method
-    *   Display instrumented 'introductory panel' explaining the feature to the user
-    *
-    *   Telemetry Probes:
-    *
-    *   - {event: introduction-shown}
-    *
-    *   - {event: introduction-accept}
-    *
-    *   - {event: introduction-leave-study}
-    *
-    *    Note:  Panel WILL NOT SHOW if the only window open is a private window.
-    *
-    *
-  */
-  showIntroPanel() {
-    // TODO bdanforth: show onboarding TP panel here, if window is not private
-  }
-
-  addListeners() {
+  addContentMessageListeners() {
     // content listener
     Services.mm.addMessageListener(
       "TrackingStudy:OnContentMessage",
@@ -574,9 +501,10 @@ class Feature {
   handleMessageFromContent(msg) {
     switch (msg.data.action) {
       case "get-totals":
+      // TODO bdanforth: update what text is shown based on treatment branch
         msg.target.messageManager.sendAsyncMessage("TrackingStudy:Totals", {
-          type: "totalBlockedResources",
-          value: 12, // TODO bdanforth: pass actual value here
+          type: "newTabContent",
+          state: this.state,
         });
         break;
       default:
