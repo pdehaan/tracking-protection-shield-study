@@ -91,18 +91,15 @@ var config = {
     return true;
   },
 
-  /* Button study branches and sample weights
-     - test kittens vs. puppies if we can only have one.
-       - downweight lizards.  Lizards is a 'poison' branch, meant to
-         help control for novelty effect
-  */
+  /* Study branches and sample weights */
+  // TODO bdanforth: Finalize branches and weights
   "weightedVariations": [
-    {"name": "kittens",
+    {"name": "fast",
       "weight": 1.5},
-    {"name": "puppers",
+    {"name": "private",
       "weight": 1.5},
-    {"name": "lizard",
-      "weight": 1},  // we want more puppers in our sample
+    {"name": "adBlocking",
+      "weight": 1},
   ],
 
 

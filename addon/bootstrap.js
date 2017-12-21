@@ -1,7 +1,6 @@
 "use strict";
 
-/* global  __SCRIPT_URI_SPEC__  */
-/* global Feature, Services */ // Cu.import
+/* global Feature, Services __SCRIPT_URI_SPEC__ */
 /* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(startup|shutdown|install|uninstall)" }]*/
 
 const { classes: Cc, interfaces: Ci, utils: Cu } = Components;
@@ -59,12 +58,6 @@ this.Bootstrap = {
 
     // log what the study variation and other info is.
     log.debug(`info ${JSON.stringify(studyUtils.info())}`);
-
-    // IFF the study has an embedded webExtension, start it.
-    const { webExtension } = addonData;
-    if (webExtension) {
-      await this.startupWebExtension(webExtension);
-    }
 
     // make sure the UI is available before adding the feature
     if (!Services.wm.getMostRecentWindow("navigator:browser")) {
@@ -151,17 +144,6 @@ this.Bootstrap = {
       await studyUtils.endStudy({reason: "ineligible"});
     }
     return isEligible;
-  },
-
-  async startupWebExtension(webExtension) {
-    webExtension.startup().then(api => {
-      const {browser} = api;
-      /** spec for messages intended for Shield =>
-        * {shield:true,msg=[info|endStudy|telemetry],data=data}
-        */
-      browser.runtime.onMessage.addListener(studyUtils.respondToWebExtensionMessage);
-      // other browser.runtime.onMessage handlers for your addon, if any
-    });
   },
 
   // choose the variation for this particular user, then set it.

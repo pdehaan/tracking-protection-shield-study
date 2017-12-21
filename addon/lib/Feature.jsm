@@ -1,5 +1,13 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+// @QUESTION: What would you say is done/left to do? (let's go through the TODOs left by rhelmer)
+// @QUESTION: (If I get a chance to look into it in advance) Why is Issue #6 (counter resetting) happening?
+
 "use strict";
 
+/* global blocklists */
 
 /**  What this Feature does: TODO bdanforth: complete
   *
@@ -21,15 +29,38 @@
 
 /* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(EXPORTED_SYMBOLS|Feature)" }]*/
 
-const { utils: Cu } = Components;
+// Import Firefox modules and services
+const { classes: Cc, interfaces: Ci, utils: Cu } = Components;
+// TODO bdanforth: set up log using Console API as in bootstrap.js
 Cu.import("resource://gre/modules/Console.jsm");
-Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
+XPCOMUtils.defineLazyModuleGetter(this, "Services",
+  "resource://gre/modules/Services.jsm");
+XPCOMUtils.defineLazyModuleGetter(this, "WebRequest",
+  "resource://gre/modules/WebRequest.jsm");
+XPCOMUtils.defineLazyServiceGetter(this, "styleSheetService",
+  "@mozilla.org/content/style-sheet-service;1", "nsIStyleSheetService");
+
+// Import URL Web API into module
+Cu.importGlobalProperties(["URL"]);
+
+// Import addon-specific modules
+const BASE = "tracking-protection-messaging";
+XPCOMUtils.defineLazyModuleGetter(this, "canonicalizeHost",
+  `resource://${BASE}/lib/Canonicalize.jsm`);
+XPCOMUtils.defineLazyModuleGetter(this, "blocklists",
+  `resource://${BASE}/lib/BlockLists.jsm`);
 
 const EXPORTED_SYMBOLS = ["Feature"];
 
-XPCOMUtils.defineLazyModuleGetter(this, "RecentWindow",
-  "resource:///modules/RecentWindow.jsm");
+const XUL_NS = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
+
+// TODO bdanforth: disable built-in tracking protection
+// const TRACKING_PROTECTION_PREF = "privacy.trackingprotection.enabled";
+// const TRACKING_PROTECTION_UI_PREF = "privacy.trackingprotection.ui.enabled";
+const DOORHANGER_ID = "onboarding-trackingprotection-notification";
+const DOORHANGER_ICON = "chrome://browser/skin/tracking-protection-16.svg#enabled";
+const STYLESHEET_URL = `resource://${BASE}/skin/tracking-protection-study.css`;
 
 class Feature {
   /** The study feature.
@@ -42,34 +73,424 @@ class Feature {
   constructor({variation, studyUtils, reasonName}) {
     this.variation = variation;
     this.studyUtils = studyUtils;
-    this.addListeners();
+    this.reasonName = reasonName;
+    this.addContentMessageListeners();
+    this.init(variation.name);
+  }
 
-    // only during INSTALL
-    if (reasonName === "ADDON_INSTALL") {
-      this.showIntroPanel();
+  /**
+  *   Display instrumented 'introductory panel' explaining the feature to the user
+  *   Telemetry Probes: (TODO bdanforth: add telemetry probes)
+  *   - {event: introduction-shown}
+  *   - {event: introduction-accept}
+  *   - {event: introduction-leave-study}
+  *    Note:  Panel WILL NOT SHOW if the only window open is a private window.
+  *
+  * Shows the intro doorhanger
+  * (has different content than the doorhanger that shows when
+  * the user clicks the pageAction button).
+  * Open doorhanger-style notification on desired chrome window.
+  * Note: this doorhanger is different (id=DOORHANGER_ID)
+  * than the doorhanger that appears when the pageAction button
+  * is clicked in the `showPageAction` method.
+  * (id="tracking-protection-study-panel")
+  * Note: This method is currently called on Feature.init()
+  *
+  * @param {ChromeWindow} win
+  * @param {String} message
+  * @param {String} url
+  */
+  showIntroPanel(win, message, url) {
+    // Only show intro panel when the addon was just installed
+    if (this.reasonName !== "ADDON_INSTALL") {
+      return;
+    }
+
+    const options = {
+      popupIconURL: DOORHANGER_ICON,
+      learnMoreURL: url,
+      persistent: true,
+      persistWhileVisible: true,
+    };
+
+    const action = {
+      label: "Got it!",
+      accessKey: "G",
+      callback: function() {
+        console.log(`You clicked the button.`);
+      },
+    };
+
+    // Note: With "npm run firefox", panel does not open correctly without a delay
+    // @QUESTION rhelmer: Why?
+    win.setTimeout(() => {
+      win.PopupNotifications.show(
+        win.gBrowser.selectedBrowser,
+        DOORHANGER_ID,
+        message,
+        null,
+        action,
+        [],
+        options
+      );
+    }, 1000);
+  }
+
+  // @QUESTION rhelmer: This method is called if event occurs from:
+  // Services.wm.addListener(this) in init()
+  // Adds event listeners to newly created windows (browser application window)
+  // This method is NOT called when opening a new tab.
+  onOpenWindow(xulWindow) {
+    console.log("onOpenWindow fired");
+    var win = xulWindow.QueryInterface(Ci.nsIInterfaceRequestor)
+      .getInterface(Ci.nsIDOMWindowInternal || Ci.nsIDOMWindow);
+    win.addEventListener("load", () => this.addWindowEventListeners(win), {once: true});
+  }
+
+  // @QUESTION rhelmer: This method is called if event occurs from:
+  // Services.wm.addListener(this) in init() and addWindowEventListeners()
+  // from addTabsProgressListener
+  // This method is called when opening a new tab.
+  // Not appropriate for modifying the page itself because the page hasn't finished
+  // loading yet. https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIWebProgressListener
+  onLocationChange(browser, progress, request, uri, flags) {
+    console.log("onLocationChange fired");
+    // if tracking protection has blocked any resources for this page
+    if (this.state.blockedResources.has(browser)) {
+      this.showPageAction(browser.getRootNode(), 0);
+      this.setPageActionCounter(browser.getRootNode(), 0);
+      this.state.blockedResources.set(browser, 0);
     }
   }
 
   /**
-    *   Display instrumented 'introductory panel' explaining the feature to the user
-    *
-    *   Telemetry Probes:
-    *
-    *   - {event: introduction-shown}
-    *
-    *   - {event: introduction-accept}
-    *
-    *   - {event: introduction-leave-study}
-    *
-    *    Note:  Panel WILL NOT SHOW if the only window open is a private window.
-    *
-    *
+  * Called when the browser is about to make a network request.
+  * @returns {BlockingResponse} object (determines whether or not
+  * the request should be cancelled)
   */
-  showIntroPanel() {
-    // TODO bdanforth: show onboarding TP panel here, if window is not private
+  onBeforeRequest(details) {
+    if (details && details.url && details.browser) {
+      const browser = details.browser;
+      const currentURI = browser.currentURI;
+
+      if (!currentURI) {
+        return {};
+      }
+
+      if (!details.originUrl) {
+        return {};
+      }
+
+      if (currentURI.scheme !== "http" && currentURI.scheme !== "https") {
+        return {};
+      }
+
+      const currentHost = currentURI.host;
+      const host = new URL(details.originUrl).host;
+
+      // Block third-party requests only.
+      if (currentHost !== host && blocklists.hostInBlocklist(this.state.blocklist, host)) {
+        let counter;
+        if (this.state.blockedResources.has(details.browser)) {
+          counter = this.state.blockedResources.get(details.browser);
+          counter++;
+        } else {
+          counter = 1;
+        }
+
+        // TODO enable allowed hosts.
+        if (this.state.allowedHosts.has(currentHost)) {
+          this.state.totalAllowedResources += 1;
+        } else {
+          this.state.totalBlockedResources += 1;
+        }
+
+        const domain = host.split(".");
+        domain.shift();
+        const rootDomain = domain.join(".");
+        for (const entity in this.state.entityList) {
+          if (this.state.entityList[entity].resources.includes(rootDomain)) {
+            this.state.totalBlockedEntities.add(entity);
+          }
+        }
+
+        this.state.blockedResources.set(details.browser, counter);
+
+        const enumerator = Services.wm.getEnumerator("navigator:browser");
+        while (enumerator.hasMoreElements()) {
+          const win = enumerator.getNext();
+          // Mac OS has an application window that keeps running even if all
+          // normal Firefox windows are closed.
+          if (win === Services.appShell.hiddenDOMWindow) {
+            continue;
+          }
+
+          if (details.browser === win.gBrowser.selectedBrowser) {
+            this.showPageAction(browser.getRootNode(), counter);
+            this.setPageActionCounter(browser.getRootNode(), counter);
+          }
+        }
+        return {cancel: true};
+      }
+    }
+    return {};
   }
 
-  addListeners() {
+  /**
+   * Shows the page action button.
+   *
+   * @param {document} doc - the browser.xul document for the page action.
+   * @param {number} counter - blocked count for the current page.
+   */
+  showPageAction(doc, counter) {
+    const win = Services.wm.getMostRecentWindow("navigator:browser");
+    const currentHost = win.gBrowser.currentURI.host;
+
+    let button = doc.getElementById("tracking-protection-study-button");
+    if (button) {
+      button.parentElement.removeChild(button);
+    }
+    doc.getElementById("tracking");
+    const urlbar = doc.getElementById("page-action-buttons");
+
+    const panel = doc.createElementNS(XUL_NS, "panel");
+    panel.setAttribute("id", "tracking-protection-study-panel");
+    panel.setAttribute("type", "arrow");
+    panel.setAttribute("level", "parent");
+    const panelBox = doc.createElementNS(XUL_NS, "vbox");
+
+    const header = doc.createElementNS(XUL_NS, "label");
+    header.setAttribute("value", `Firefox is blocking ${counter} elements on this page`);
+
+    const controls = doc.createElementNS(XUL_NS, "hbox");
+
+    const group = doc.createElementNS(XUL_NS, "radiogroup");
+    const enabled = doc.createElementNS(XUL_NS, "radio");
+    enabled.setAttribute("label", "Enable on this site");
+    enabled.addEventListener("click", () => {
+      if (this.state.allowedHosts.has(currentHost)) {
+        this.state.allowedHosts.delete(currentHost);
+      }
+      win.gBrowser.reload();
+    });
+    const disabled = doc.createElementNS(XUL_NS, "radio");
+    disabled.setAttribute("label", "Disable on this site");
+    disabled.addEventListener("click", () => {
+      this.state.allowedHosts.add(currentHost);
+      win.gBrowser.reload();
+    });
+    if (this.state.allowedHosts.has(currentHost)) {
+      disabled.setAttribute("selected", true);
+    } else {
+      enabled.setAttribute("selected", true);
+    }
+    group.append(enabled);
+    group.append(disabled);
+    controls.append(group);
+
+    const footer = doc.createElementNS(XUL_NS, "label");
+    footer.setAttribute("value", "If the website appears broken, consider" +
+                                 " disabling tracking protection and" +
+                                 " refreshing the page.");
+
+    panelBox.append(header);
+    panelBox.append(controls);
+    panelBox.append(footer);
+
+    panel.append(panelBox);
+
+    button = doc.createElementNS(XUL_NS, "toolbarbutton");
+    if (this.state.allowedHosts.has(currentHost)) {
+      button.style.backgroundColor = "yellow";
+    } else {
+      button.style.backgroundColor = "green";
+    }
+    button.setAttribute("id", "tracking-protection-study-button");
+    button.setAttribute("image", "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled");
+    button.append(panel);
+    button.addEventListener("command", () => {
+      doc.getElementById("panel");
+      panel.openPopup(button);
+    });
+
+    urlbar.append(button);
+  }
+
+  setPageActionCounter(doc, counter) {
+    const toolbarButton = doc.getElementById("tracking-protection-study-button");
+    if (toolbarButton) {
+      toolbarButton.setAttribute("label", counter);
+    }
+  }
+
+  hidePageAction(doc) {
+    const button = doc.getElementById("tracking-protection-study-button");
+    if (button) {
+      button.parentElement.removeChild(button);
+    }
+  }
+
+  /**
+  * Called when a non-focused tab is selected.
+  * @QUESTION rhelmer: What does this method do exactly?
+  */
+  onTabChange(evt) {
+    const win = evt.target.ownerGlobal;
+    const currentURI = win.gBrowser.currentURI;
+    if (currentURI.scheme !== "http" && currentURI.scheme !== "https") {
+      this.hidePageAction(win.document);
+      return;
+    }
+
+    const currentWin = Services.wm.getMostRecentWindow("navigator:browser");
+
+    // If user changes tabs but stays within current window we want to update the status
+    // of the pageAction, then reshow it if the new page has had any resources blocked.
+    if (win === currentWin) {
+      this.hidePageAction(win.document);
+      const counter = this.state.blockedResources.get(win.gBrowser.selectedBrowser);
+
+      if (counter) {
+        this.showPageAction(win.document, counter);
+        this.setPageActionCounter(win.document, counter);
+      }
+    }
+  }
+
+  async init(treatment) {
+
+    // TODO bdanforth: get treatment(s) from bootstrap/studyUtils
+    // define treatments as STRING: fn(browserWindow, url)
+    this.TREATMENTS = {
+      fast: this.showIntroPanel.bind(this), // opens a doorhanger on addon install only
+      private: this.showIntroPanel.bind(this),
+      adBlocking: this.showIntroPanel.bind(this),
+    };
+
+    this.treatment = treatment;
+    // TODO bdanforth: update newtab messages copy
+    const newtab_messages = [
+      "Firefox blocked ${blockedRequests} trackers today<br/> from ${blockedEntities} companies that track your browsing",
+      "Firefox blocked ${blockedRequests} trackers today<br/> and saved you ${minutes} minutes",
+      "Firefox blocked ${blockedRequests} ads today from<br/> ${blockedSites} different websites",
+    ];
+    // TODO bdanforth: update with final URLs
+    const learnMore_urls = [
+      "http://www.mozilla.com",
+    ];
+    // TODO bdanforth: update intro panel message copy
+    this.message = "Tracking protection is great! Would you like to participate in a study?";
+    this.url = learnMore_urls[0];
+
+    // run once now on the most recent window.
+    let win = Services.wm.getMostRecentWindow("navigator:browser");
+
+    // TODO bdanforth: remove if there is no "ALL" treatment, ultimately
+    if (this.treatment === "ALL") {
+      Object.keys(this.TREATMENTS).forEach((key, index) => {
+        if (Object.prototype.hasOwnProperty.call(this.TREATMENTS, key)) {
+          this.TREATMENTS[key](win, this.message, this.url);
+        }
+      });
+    } else if (this.treatment in this.TREATMENTS) {
+      this.TREATMENTS[this.treatment](win, this.message, this.url);
+    }
+
+    this.state = {
+      // TODO bdanforth: choose message based on treatment branch
+      newTabMessage: newtab_messages[0],
+      timeSave: 0,
+      blocklist: new Map(),
+      allowedHosts: new Set(),
+      reportedHosts: {},
+      entityList: {},
+      blockedResources: new Map(),
+      // TODO bdanforth: reset to 0 after testing
+      totalBlockedResources: 1,
+      totalAllowedResources: 0,
+      totalBlockedEntities: new Set(),
+    };
+
+    await blocklists.loadLists(this.state);
+
+    const filter = {urls: new win.MatchPatternSet(["*://*/*"])};
+    this.onBeforeRequest = this.onBeforeRequest.bind(this);
+
+    WebRequest.onBeforeRequest.addListener(this.onBeforeRequest, filter, ["blocking"]);
+
+    const uri = Services.io.newURI(STYLESHEET_URL);
+    styleSheetService.loadAndRegisterSheet(uri, styleSheetService.AGENT_SHEET);
+
+    // Add listeners to all open windows.
+    const enumerator = Services.wm.getEnumerator("navigator:browser");
+    while (enumerator.hasMoreElements()) {
+      win = enumerator.getNext();
+      if (win === Services.appShell.hiddenDOMWindow) {
+        continue;
+      }
+
+      this.addWindowEventListeners(win);
+    }
+
+    // Attach to any new windows.
+    // Depending on which event happens (ex: onOpenWindow, onLocationChange),
+    // it will call that listener method that exists on "this"
+    Services.wm.addListener(this);
+  }
+
+  /**
+  * Three cases of user looking at diff page:
+      - switched windows (onOpenWindow)
+      - loading new pages in the same tab (onPageLoad/Frame script)
+      - switching tabs but not switching windows (tabSelect)
+    Each one needs its own separate handler, because each one is detected by its own
+    separate event.
+  * @param {ChromeWindow} win
+  */
+  addWindowEventListeners(win) {
+    if (win && win.gBrowser) {
+      win.gBrowser.addTabsProgressListener(this);
+      win.gBrowser.tabContainer.addEventListener("TabSelect", this.onTabChange.bind(this));
+      // TODO bdanforth: Remove this listener after asking rhelmer about it; now essentially the same
+      // as "addContentToNewTab" method in frame script.
+      // @QUESTION rhelmer: This "load" event is not firing on page loads
+      // Does each webpages load event bubble up to parent window?
+      // At this point, when the parent window has loaded, what is the appropriate listener
+      // to register to say when a page in this browser has finished loading and can be modified?
+      // win.addEventListener("load", () => this.onPageLoad);
+    }
+  }
+
+  uninit() {
+    // Remove listeners from all open windows.
+    const enumerator = Services.wm.getEnumerator("navigator:browser");
+    while (enumerator.hasMoreElements()) {
+      const win = enumerator.getNext();
+      if (win === Services.appShell.hiddenDOMWindow) {
+        continue;
+      }
+
+      const button = win.document.getElementById("tracking-protection-study");
+      if (button) {
+        button.parentElement.removeChild(button);
+      }
+
+      WebRequest.onBeforeRequest.removeListener(this.onBeforeRequest);
+      win.gBrowser.removeTabsProgressListener(this);
+      win.gBrowser.tabContainer.removeEventListener("TabSelect", this.onTabChange);
+      win.removeEventListener("load", this.onPageLoad);
+
+      Services.wm.removeListener(this);
+    }
+
+    const uri = Services.io.newURI(STYLESHEET_URL);
+    styleSheetService.unregisterSheet(uri, styleSheetService.AGENT_SHEET);
+
+    Cu.unload("resource://tracking-protection-study/Canonicalize.jsm");
+    Cu.unload("resource://tracking-protection-study/BlockLists.jsm");
+  }
+
+  addContentMessageListeners() {
     // content listener
     Services.mm.addMessageListener(
       "TrackingStudy:OnContentMessage",
@@ -80,9 +501,10 @@ class Feature {
   handleMessageFromContent(msg) {
     switch (msg.data.action) {
       case "get-totals":
+      // TODO bdanforth: update what text is shown based on treatment branch
         msg.target.messageManager.sendAsyncMessage("TrackingStudy:Totals", {
-          type: "totalBlockedResources",
-          value: 12, // TODO bdanforth: pass actual value here
+          type: "newTabContent",
+          state: this.state,
         });
         break;
       default:
