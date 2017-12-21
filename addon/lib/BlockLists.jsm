@@ -25,6 +25,7 @@ const blocklists = {
     });
 
     /*
+    * The Entity list whitelists different domains that are wholly owned by the same company
     disconnect-entitylist.json, where:
     - 'properties' keys are first parties
     - 'resources' keys are third parties
@@ -34,17 +35,16 @@ const blocklists = {
     });
 
     // @QUESTION rhelmer: what's this for? Why would they be kept in storage?
-    // const allowedHostsPromise = this.getAllowedHostsList().then((allowedHosts) => {
-    //   state.allowedHosts = allowedHosts
-    // })
+    const allowedHostsPromise = this.getAllowedHostsList().then((allowedHosts) => {
+      state.allowedHosts = allowedHosts;
+    });
 
     // @QUESTION rhelmer: what's this for? Why would they be kept in storage?
     const reportedHostsPromise = this.getReportedHostsList().then((reportedHosts) => {
       state.reportedHosts = reportedHosts;
     });
 
-    // return Promise.all([blockListPromise, entityListPromise, allowedHostsPromise, reportedHostsPromise])
-    return Promise.all([blockListPromise, entityListPromise, reportedHostsPromise]);
+    return Promise.all([blockListPromise, entityListPromise, allowedHostsPromise, reportedHostsPromise]);
   },
 
   loadJSON(url) {

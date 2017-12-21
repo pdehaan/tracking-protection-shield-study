@@ -132,16 +132,18 @@ class Feature {
       // An object where top level keys are owning company names; each company key points
       // to an object with a property and resource key.
       entityList: {},
+      // a <browser>:counter map for the number of blocked resources for a particular browser
+      // @QUESTION rhelmer: Why is this mapped with <browser>?
       blockedResources: new Map(),
       // TODO bdanforth: reset to 0 after testing
       totalBlockedResources: 1,
+      // @QUESTION rhelmer: Why do we want to keep track of total allowed resources?
       totalAllowedResources: 0,
       totalBlockedEntities: new Set(),
     };
 
     // populate lists in this.state: blocklist, entityList, etc.
     await blocklists.loadLists(this.state);
-    console.log(this.state.entityList);
 
     const filter = {urls: new win.MatchPatternSet(["*://*/*"])};
 
@@ -262,6 +264,8 @@ class Feature {
   * Called when the browser is about to make a network request.
   * @returns {BlockingResponse} object (determines whether or not
   * the request should be cancelled)
+  * If this method returns {}, the request will not be blocked;
+  * if it returns { cancel: true }, the request will be blocked.
   */
   onBeforeRequest(details) {
     // details.url is the target url for the request
@@ -288,29 +292,40 @@ class Feature {
 
       // Block third-party requests only.
       if (currentHost !== host && blocklists.hostInBlocklist(this.state.blocklist, host)) {
-        let counter;
+        let counter = 0;
         if (this.state.blockedResources.has(details.browser)) {
           counter = this.state.blockedResources.get(details.browser);
-          counter++;
-        } else {
-          counter = 1;
         }
+        counter++;
 
         // TODO enable allowed hosts.
-        if (this.state.allowedHosts.has(currentHost)) {
+        if (this.state.allowedHosts.includes(currentHost)) {
           this.state.totalAllowedResources += 1;
         } else {
           this.state.totalBlockedResources += 1;
         }
 
-        const domain = host.split(".");
-        domain.shift();
-        const rootDomain = domain.join(".");
+        const rootDomainHost = this.getRootDomain(host);
+        const rootDomainCurrentHost = this.getRootDomain(currentHost);
+
+        // check if host entity is in the entity list
         for (const entity in this.state.entityList) {
-          if (this.state.entityList[entity].resources.includes(rootDomain)) {
+          if (this.state.entityList[entity].resources.includes(rootDomainHost)) {
+            // This just means that this "host" is contained in the entity list
+            // and owned by "entity"
+            // but we have to check and see if the "currentHost" is also owned by
+            // "entity"
+            // if it is, don't block the request; if it isn't, block the request and
+            // add the entity to the list of "totalBlockedEntities" 
+            if (this.state.entityList[entity].resources.includes(rootDomainCurrentHost)
+              || this.state.entityList[entity].properties.includes(rootDomainCurrentHost)) {
+              return {};
+            }
             this.state.totalBlockedEntities.add(entity);
           }
         }
+
+        // If we get this far, we're going to block the request.
 
         this.state.blockedResources.set(details.browser, counter);
 
@@ -332,6 +347,13 @@ class Feature {
       }
     }
     return {};
+  }
+
+  // e.g. takes "www.mozilla.com", and turns it into "mozilla.com"
+  getRootDomain(host) {
+    const domain = host.split(".");
+    domain.shift();
+    return domain.join(".");
   }
 
   /**
@@ -366,7 +388,7 @@ class Feature {
     const enabled = doc.createElementNS(XUL_NS, "radio");
     enabled.setAttribute("label", "Enable on this site");
     enabled.addEventListener("click", () => {
-      if (this.state.allowedHosts.has(currentHost)) {
+      if (this.state.allowedHosts.includes(currentHost)) {
         this.state.allowedHosts.delete(currentHost);
       }
       win.gBrowser.reload();
@@ -377,7 +399,7 @@ class Feature {
       this.state.allowedHosts.add(currentHost);
       win.gBrowser.reload();
     });
-    if (this.state.allowedHosts.has(currentHost)) {
+    if (this.state.allowedHosts.includes(currentHost)) {
       disabled.setAttribute("selected", true);
     } else {
       enabled.setAttribute("selected", true);
@@ -398,7 +420,7 @@ class Feature {
     panel.append(panelBox);
 
     button = doc.createElementNS(XUL_NS, "toolbarbutton");
-    if (this.state.allowedHosts.has(currentHost)) {
+    if (this.state.allowedHosts.includes(currentHost)) {
       button.style.backgroundColor = "yellow";
     } else {
       button.style.backgroundColor = "green";
