@@ -91,9 +91,8 @@ class Feature {
     this.treatment = treatment;
     // TODO bdanforth: update newtab messages copy
     const newtab_messages = [
-      "Firefox blocked ${blockedRequests} trackers today<br/> from ${blockedEntities} companies that track your browsing",
+      "Firefox blocked ${blockedRequests} trackers today<br/> from ${blockedCompanies} companies that track your browsing",
       "Firefox blocked ${blockedRequests} trackers today<br/> and saved you ${minutes} minutes",
-      "Firefox blocked ${blockedRequests} ads today from<br/> ${blockedSites} different websites",
     ];
     // TODO bdanforth: update with final URLs
     const learnMore_urls = [
@@ -139,7 +138,10 @@ class Feature {
       totalBlockedResources: 1,
       // @QUESTION rhelmer: Why do we want to keep track of total allowed resources?
       totalAllowedResources: 0,
-      totalBlockedEntities: new Set(),
+      blockedCompanies: new Set(),
+      totalBlockedCompanies: 0,
+      blockedWebsites: new Set(),
+      totalBlockedWebsites: 0,
     };
 
     // populate lists in this.state: blocklist, entityList, etc.
@@ -244,19 +246,22 @@ class Feature {
     win.addEventListener("load", () => this.addWindowEventListeners(win), {once: true});
   }
 
-  // @QUESTION rhelmer: This method is called if event occurs from:
-  // Services.wm.addListener(this) in init() and addWindowEventListeners()
-  // from addTabsProgressListener
-  // This method is called when opening a new tab.
+  // This method is called when opening a new tab among many other times.
+  // This is a listener for the addTabsProgressListener
   // Not appropriate for modifying the page itself because the page hasn't finished
   // loading yet. https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIWebProgressListener
   onLocationChange(browser, progress, request, uri, flags) {
-    console.log("onLocationChange fired");
-    // if tracking protection has blocked any resources for this page
-    if (this.state.blockedResources.has(browser)) {
-      this.showPageAction(browser.getRootNode(), 0);
-      this.setPageActionCounter(browser.getRootNode(), 0);
-      this.state.blockedResources.set(browser, 0);
+    const LOCATION_CHANGE_SAME_DOCUMENT = 1;
+    // ensure the location change event is occuring in the top frame (not an iframe for example)
+    // and also that a different page is being loaded
+    if (progress.isTopLevel && flags !== LOCATION_CHANGE_SAME_DOCUMENT) {
+      // if tracking protection has already blocked any resources for this tab,
+      // reset the counter on the pageAction
+      if (this.state.blockedResources.has(browser)) {
+        this.showPageAction(browser.getRootNode(), 0);
+        this.setPageActionCounter(browser.getRootNode(), 0);
+        this.state.blockedResources.set(browser, 0);
+      }
     }
   }
 
@@ -316,16 +321,23 @@ class Feature {
             // but we have to check and see if the "currentHost" is also owned by
             // "entity"
             // if it is, don't block the request; if it isn't, block the request and
-            // add the entity to the list of "totalBlockedEntities" 
+            // add the entity to the list of "blockedCompanies" 
             if (this.state.entityList[entity].resources.includes(rootDomainCurrentHost)
               || this.state.entityList[entity].properties.includes(rootDomainCurrentHost)) {
               return {};
             }
-            this.state.totalBlockedEntities.add(entity);
+            this.state.blockedCompanies.add(entity);
+            this.state.totalBlockedCompanies = this.state.blockedCompanies.size;
           }
         }
 
         // If we get this far, we're going to block the request.
+
+        // Add host to blockedWebsites if not already present
+        if (!this.state.blockedWebsites.has(host)) {
+          this.state.blockedWebsites.add(host);
+          this.state.totalBlockedWebsites = this.state.blockedWebsites.size;
+        }
 
         this.state.blockedResources.set(details.browser, counter);
 

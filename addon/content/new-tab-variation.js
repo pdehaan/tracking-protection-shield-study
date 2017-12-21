@@ -43,8 +43,8 @@ class TrackingProtectionStudy {
     if (state.totalBlockedResources) {
       let message = state.newTabMessage;
       message = message.replace("${blockedRequests}", state.totalBlockedResources);
-      message = message.replace("${blockedEntities}", state.totalBlockedEntities.size);
-      message = message.replace("${blockedSites}", state.totalBlockedSites);
+      message = message.replace("${blockedCompanies}", state.totalBlockedCompanies);
+      message = message.replace("${blockedSites}", state.totalBlockedWebsites);
       message = message.replace("${minutes}", minutes.toPrecision(3));
 
       // Check if the study UI has already been added to this page
