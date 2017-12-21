@@ -78,6 +78,101 @@ class Feature {
     this.init(variation.name);
   }
 
+  async init(treatment) {
+
+    // TODO bdanforth: get treatment(s) from bootstrap/studyUtils
+    // define treatments as STRING: fn(browserWindow, url)
+    this.TREATMENTS = {
+      fast: this.showIntroPanel.bind(this), // opens a doorhanger on addon install only
+      private: this.showIntroPanel.bind(this),
+      adBlocking: this.showIntroPanel.bind(this),
+    };
+
+    this.treatment = treatment;
+    // TODO bdanforth: update newtab messages copy
+    const newtab_messages = [
+      "Firefox blocked ${blockedRequests} trackers today<br/> from ${blockedEntities} companies that track your browsing",
+      "Firefox blocked ${blockedRequests} trackers today<br/> and saved you ${minutes} minutes",
+      "Firefox blocked ${blockedRequests} ads today from<br/> ${blockedSites} different websites",
+    ];
+    // TODO bdanforth: update with final URLs
+    const learnMore_urls = [
+      "http://www.mozilla.com",
+    ];
+    // TODO bdanforth: update intro panel message copy
+    this.message = "Tracking protection is great! Would you like to participate in a study?";
+    this.url = learnMore_urls[0];
+
+    // run once now on the most recent window.
+    let win = Services.wm.getMostRecentWindow("navigator:browser");
+
+    // TODO bdanforth: remove if there is no "ALL" treatment, ultimately
+    if (this.treatment === "ALL") {
+      Object.keys(this.TREATMENTS).forEach((key, index) => {
+        if (Object.prototype.hasOwnProperty.call(this.TREATMENTS, key)) {
+          this.TREATMENTS[key](win, this.message, this.url);
+        }
+      });
+    } else if (this.treatment in this.TREATMENTS) {
+      this.TREATMENTS[this.treatment](win, this.message, this.url);
+    }
+
+    // TODO bdanforth: include a doc block with format/content for each list/map/set
+    this.state = {
+      // TODO bdanforth: choose message based on treatment branch
+      newTabMessage: newtab_messages[0],
+      timeSave: 0,
+      // a map with each key a domain name of a known tracker and each value 
+      // the domain name of the owning entity (ex: "facebook.de" -> "facebook.com")
+      blocklist: new Map(),
+      // @QUESTION rhelmer: What is this for? Also go into BlockLists.jsm and clarify intent.
+      allowedHosts: new Set(),
+      // @QUESTION rhelmer: What is this for? Also go into BlockLists.jsm and clarify intent.
+      reportedHosts: {},
+      // An object where top level keys are owning company names; each company key points
+      // to an object with a property and resource key.
+      entityList: {},
+      blockedResources: new Map(),
+      // TODO bdanforth: reset to 0 after testing
+      totalBlockedResources: 1,
+      totalAllowedResources: 0,
+      totalBlockedEntities: new Set(),
+    };
+
+    // populate lists in this.state: blocklist, entityList, etc.
+    await blocklists.loadLists(this.state);
+    console.log(this.state.entityList);
+
+    const filter = {urls: new win.MatchPatternSet(["*://*/*"])};
+
+    // Tracking protection implementation
+    WebRequest.onBeforeRequest.addListener(
+      this.onBeforeRequest.bind(this),
+      // listener will only be called for requests whose targets match the filter
+      filter,
+      ["blocking"]
+    );
+
+    const uri = Services.io.newURI(STYLESHEET_URL);
+    styleSheetService.loadAndRegisterSheet(uri, styleSheetService.AGENT_SHEET);
+
+    // Add listeners to all open windows.
+    const enumerator = Services.wm.getEnumerator("navigator:browser");
+    while (enumerator.hasMoreElements()) {
+      win = enumerator.getNext();
+      if (win === Services.appShell.hiddenDOMWindow) {
+        continue;
+      }
+
+      this.addWindowEventListeners(win);
+    }
+
+    // Attach to any new windows.
+    // Depending on which event happens (ex: onOpenWindow, onLocationChange),
+    // it will call that listener method that exists on "this"
+    Services.wm.addListener(this);
+  }
+
   /**
   *   Display instrumented 'introductory panel' explaining the feature to the user
   *   Telemetry Probes: (TODO bdanforth: add telemetry probes)
@@ -169,14 +264,17 @@ class Feature {
   * the request should be cancelled)
   */
   onBeforeRequest(details) {
+    // details.url is the target url for the request
     if (details && details.url && details.browser) {
       const browser = details.browser;
+      // nsIURI object with attributes to set and query the basic components of the browser's current URI
       const currentURI = browser.currentURI;
 
       if (!currentURI) {
         return {};
       }
 
+      // the URL for the entity making the request
       if (!details.originUrl) {
         return {};
       }
@@ -185,8 +283,8 @@ class Feature {
         return {};
       }
 
-      const currentHost = currentURI.host;
-      const host = new URL(details.originUrl).host;
+      const currentHost = currentURI.host; // the domain name for the current page (e.g. www.nytimes.com)
+      const host = new URL(details.originUrl).host; // the domain name for the entity making the request
 
       // Block third-party requests only.
       if (currentHost !== host && blocklists.hostInBlocklist(this.state.blocklist, host)) {
@@ -355,87 +453,6 @@ class Feature {
         this.setPageActionCounter(win.document, counter);
       }
     }
-  }
-
-  async init(treatment) {
-
-    // TODO bdanforth: get treatment(s) from bootstrap/studyUtils
-    // define treatments as STRING: fn(browserWindow, url)
-    this.TREATMENTS = {
-      fast: this.showIntroPanel.bind(this), // opens a doorhanger on addon install only
-      private: this.showIntroPanel.bind(this),
-      adBlocking: this.showIntroPanel.bind(this),
-    };
-
-    this.treatment = treatment;
-    // TODO bdanforth: update newtab messages copy
-    const newtab_messages = [
-      "Firefox blocked ${blockedRequests} trackers today<br/> from ${blockedEntities} companies that track your browsing",
-      "Firefox blocked ${blockedRequests} trackers today<br/> and saved you ${minutes} minutes",
-      "Firefox blocked ${blockedRequests} ads today from<br/> ${blockedSites} different websites",
-    ];
-    // TODO bdanforth: update with final URLs
-    const learnMore_urls = [
-      "http://www.mozilla.com",
-    ];
-    // TODO bdanforth: update intro panel message copy
-    this.message = "Tracking protection is great! Would you like to participate in a study?";
-    this.url = learnMore_urls[0];
-
-    // run once now on the most recent window.
-    let win = Services.wm.getMostRecentWindow("navigator:browser");
-
-    // TODO bdanforth: remove if there is no "ALL" treatment, ultimately
-    if (this.treatment === "ALL") {
-      Object.keys(this.TREATMENTS).forEach((key, index) => {
-        if (Object.prototype.hasOwnProperty.call(this.TREATMENTS, key)) {
-          this.TREATMENTS[key](win, this.message, this.url);
-        }
-      });
-    } else if (this.treatment in this.TREATMENTS) {
-      this.TREATMENTS[this.treatment](win, this.message, this.url);
-    }
-
-    this.state = {
-      // TODO bdanforth: choose message based on treatment branch
-      newTabMessage: newtab_messages[0],
-      timeSave: 0,
-      blocklist: new Map(),
-      allowedHosts: new Set(),
-      reportedHosts: {},
-      entityList: {},
-      blockedResources: new Map(),
-      // TODO bdanforth: reset to 0 after testing
-      totalBlockedResources: 1,
-      totalAllowedResources: 0,
-      totalBlockedEntities: new Set(),
-    };
-
-    await blocklists.loadLists(this.state);
-
-    const filter = {urls: new win.MatchPatternSet(["*://*/*"])};
-    this.onBeforeRequest = this.onBeforeRequest.bind(this);
-
-    WebRequest.onBeforeRequest.addListener(this.onBeforeRequest, filter, ["blocking"]);
-
-    const uri = Services.io.newURI(STYLESHEET_URL);
-    styleSheetService.loadAndRegisterSheet(uri, styleSheetService.AGENT_SHEET);
-
-    // Add listeners to all open windows.
-    const enumerator = Services.wm.getEnumerator("navigator:browser");
-    while (enumerator.hasMoreElements()) {
-      win = enumerator.getNext();
-      if (win === Services.appShell.hiddenDOMWindow) {
-        continue;
-      }
-
-      this.addWindowEventListeners(win);
-    }
-
-    // Attach to any new windows.
-    // Depending on which event happens (ex: onOpenWindow, onLocationChange),
-    // it will call that listener method that exists on "this"
-    Services.wm.addListener(this);
   }
 
   /**

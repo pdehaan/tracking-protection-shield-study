@@ -24,15 +24,21 @@ const blocklists = {
       state.blocklist = this.processBlockListJSON(data);
     });
 
+    /*
+    disconnect-entitylist.json, where:
+    - 'properties' keys are first parties
+    - 'resources' keys are third parties
+    */
     const entityListPromise = this.loadJSON(`resource://${BASE}/lib/disconnect-entitylist.json`).then((data) => {
       state.entityList = data;
     });
 
-    // TODO bdanforth: figure out why this is commented out
+    // @QUESTION rhelmer: what's this for? Why would they be kept in storage?
     // const allowedHostsPromise = this.getAllowedHostsList().then((allowedHosts) => {
     //   state.allowedHosts = allowedHosts
     // })
 
+    // @QUESTION rhelmer: what's this for? Why would they be kept in storage?
     const reportedHostsPromise = this.getReportedHostsList().then((reportedHosts) => {
       state.reportedHosts = reportedHosts;
     });
@@ -87,11 +93,13 @@ const blocklists = {
     return blocklist;
   },
 
+  // @QUESTION: rhelmer - what is this list for, and why is it in storage?
   async getAllowedHostsList() {
     // TODO retrieve from storage
     return [];
   },
 
+  // @QUESTION: rhelmer - what is this list for, and why is it in storage?
   async getReportedHostsList() {
     // TODO retrieve from storage
     return {};
