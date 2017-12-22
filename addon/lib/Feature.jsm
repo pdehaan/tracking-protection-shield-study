@@ -2,8 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-// @QUESTION: What would you say is done/left to do? (let's go through the TODOs left by rhelmer)
-// @QUESTION: (If I get a chance to look into it in advance) Why is Issue #6 (counter resetting) happening?
+// @QUESTION rhelmer: What would you say is done/left to do? (let's go through the TODOs left by rhelmer)
 
 "use strict";
 
@@ -116,11 +115,9 @@ class Feature {
       this.TREATMENTS[this.treatment](win, this.message, this.url);
     }
 
-    // TODO bdanforth: include a doc block with format/content for each list/map/set
-    this.state = {
-      // TODO bdanforth: choose message based on treatment branch
-      newTabMessage: newtab_messages[0],
-      timeSave: 0,
+    // TODO bdanforth: include a doc block with format/content for each list/map/set in
+    // this.lists and this.state
+    this.lists = {
       // a map with each key a domain name of a known tracker and each value 
       // the domain name of the owning entity (ex: "facebook.de" -> "facebook.com")
       blocklist: new Map(),
@@ -131,6 +128,12 @@ class Feature {
       // An object where top level keys are owning company names; each company key points
       // to an object with a property and resource key.
       entityList: {},
+    };
+
+    this.state = {
+      // TODO bdanforth: choose message based on treatment branch
+      newTabMessage: newtab_messages[0],
+      timeSave: 0,
       // a <browser>:counter map for the number of blocked resources for a particular browser
       // @QUESTION rhelmer: Why is this mapped with <browser>?
       blockedResources: new Map(),
@@ -145,7 +148,7 @@ class Feature {
     };
 
     // populate lists in this.state: blocklist, entityList, etc.
-    await blocklists.loadLists(this.state);
+    await blocklists.loadLists(this.lists);
 
     const filter = {urls: new win.MatchPatternSet(["*://*/*"])};
 
@@ -221,6 +224,7 @@ class Feature {
     };
 
     // Note: With "npm run firefox", panel does not open correctly without a delay
+    // Without timer, I see the panel flash briefly toward the bottom of the screen before being removed
     // @QUESTION rhelmer: Why?
     win.setTimeout(() => {
       win.PopupNotifications.show(
@@ -235,12 +239,11 @@ class Feature {
     }, 1000);
   }
 
-  // @QUESTION rhelmer: This method is called if event occurs from:
+  // This method is called if event occurs from:
   // Services.wm.addListener(this) in init()
   // Adds event listeners to newly created windows (browser application window)
   // This method is NOT called when opening a new tab.
   onOpenWindow(xulWindow) {
-    console.log("onOpenWindow fired");
     var win = xulWindow.QueryInterface(Ci.nsIInterfaceRequestor)
       .getInterface(Ci.nsIDOMWindowInternal || Ci.nsIDOMWindow);
     win.addEventListener("load", () => this.addWindowEventListeners(win), {once: true});
@@ -296,7 +299,7 @@ class Feature {
       const host = new URL(details.originUrl).host; // the domain name for the entity making the request
 
       // Block third-party requests only.
-      if (currentHost !== host && blocklists.hostInBlocklist(this.state.blocklist, host)) {
+      if (currentHost !== host && blocklists.hostInBlocklist(this.lists.blocklist, host)) {
         let counter = 0;
         if (this.state.blockedResources.has(details.browser)) {
           counter = this.state.blockedResources.get(details.browser);
@@ -304,30 +307,41 @@ class Feature {
         counter++;
 
         // TODO enable allowed hosts.
-        if (this.state.allowedHosts.includes(currentHost)) {
+        if (this.lists.allowedHosts.includes(currentHost)) {
           this.state.totalAllowedResources += 1;
         } else {
           this.state.totalBlockedResources += 1;
+          Services.mm.broadcastAsyncMessage("TrackingStudy:Totals", {
+            type: "updateTPNumbers",
+            state: this.state,
+          });
         }
 
         const rootDomainHost = this.getRootDomain(host);
         const rootDomainCurrentHost = this.getRootDomain(currentHost);
 
-        // check if host entity is in the entity list
-        for (const entity in this.state.entityList) {
-          if (this.state.entityList[entity].resources.includes(rootDomainHost)) {
+        // check if host entity is in the entity list;
+        // TODO bdanforth: improve effeciency of this algo
+        // see https://github.com/mozilla/blok/blob/master/src/js/requests.js#L18-L27
+        // for a much more efficient implementation
+        for (const entity in this.lists.entityList) {
+          if (this.lists.entityList[entity].resources.includes(rootDomainHost)) {
             // This just means that this "host" is contained in the entity list
             // and owned by "entity"
             // but we have to check and see if the "currentHost" is also owned by
             // "entity"
             // if it is, don't block the request; if it isn't, block the request and
             // add the entity to the list of "blockedCompanies" 
-            if (this.state.entityList[entity].resources.includes(rootDomainCurrentHost)
-              || this.state.entityList[entity].properties.includes(rootDomainCurrentHost)) {
+            if (this.lists.entityList[entity].resources.includes(rootDomainCurrentHost)
+              || this.lists.entityList[entity].properties.includes(rootDomainCurrentHost)) {
               return {};
             }
             this.state.blockedCompanies.add(entity);
             this.state.totalBlockedCompanies = this.state.blockedCompanies.size;
+            Services.mm.broadcastAsyncMessage("TrackingStudy:Totals", {
+              type: "updateTPNumbers",
+              state: this.state,
+            });
           }
         }
 
@@ -400,18 +414,18 @@ class Feature {
     const enabled = doc.createElementNS(XUL_NS, "radio");
     enabled.setAttribute("label", "Enable on this site");
     enabled.addEventListener("click", () => {
-      if (this.state.allowedHosts.includes(currentHost)) {
-        this.state.allowedHosts.delete(currentHost);
+      if (this.lists.allowedHosts.includes(currentHost)) {
+        this.lists.allowedHosts.delete(currentHost);
       }
       win.gBrowser.reload();
     });
     const disabled = doc.createElementNS(XUL_NS, "radio");
     disabled.setAttribute("label", "Disable on this site");
     disabled.addEventListener("click", () => {
-      this.state.allowedHosts.add(currentHost);
+      this.lists.allowedHosts.add(currentHost);
       win.gBrowser.reload();
     });
-    if (this.state.allowedHosts.includes(currentHost)) {
+    if (this.lists.allowedHosts.includes(currentHost)) {
       disabled.setAttribute("selected", true);
     } else {
       enabled.setAttribute("selected", true);
@@ -432,7 +446,7 @@ class Feature {
     panel.append(panelBox);
 
     button = doc.createElementNS(XUL_NS, "toolbarbutton");
-    if (this.state.allowedHosts.includes(currentHost)) {
+    if (this.lists.allowedHosts.includes(currentHost)) {
       button.style.backgroundColor = "yellow";
     } else {
       button.style.backgroundColor = "green";
@@ -464,11 +478,12 @@ class Feature {
 
   /**
   * Called when a non-focused tab is selected.
-  * @QUESTION rhelmer: What does this method do exactly?
+  * @QUESTION rhelmer: What does this method do exactly? (confirm my comments below)
   */
   onTabChange(evt) {
     const win = evt.target.ownerGlobal;
     const currentURI = win.gBrowser.currentURI;
+    // Don't show the page action if page is not http or https
     if (currentURI.scheme !== "http" && currentURI.scheme !== "https") {
       this.hidePageAction(win.document);
       return;
@@ -504,10 +519,12 @@ class Feature {
       win.gBrowser.tabContainer.addEventListener("TabSelect", this.onTabChange.bind(this));
       // TODO bdanforth: Remove this listener after asking rhelmer about it; now essentially the same
       // as "addContentToNewTab" method in frame script.
-      // @QUESTION rhelmer: This "load" event is not firing on page loads
+      // @QUESTION rhelmer: This "load" event is not firing on page loads; how can we listen for this event in a JSM?
       // Does each webpages load event bubble up to parent window?
       // At this point, when the parent window has loaded, what is the appropriate listener
       // to register to say when a page in this browser has finished loading and can be modified?
+      // I currently do this in the frame script, since this method was not firing as expected.
+      // onPageLoad function was removed, but it can be found here: https://github.com/rhelmer/tracking-protection-study/blob/9376b607d51a164d2604f5fcde5a777bd8936187/Study.jsm#L257
       // win.addEventListener("load", () => this.onPageLoad);
     }
   }

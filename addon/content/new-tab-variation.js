@@ -29,6 +29,9 @@ class TrackingProtectionStudy {
           doc.addEventListener("DOMContentLoaded", () => this.addMessageToNewTab(msg.data.state, doc));
         }
         break;
+      case "updateTPNumbers":
+        this.updateTPNumbers(msg.data.state, doc);
+        break;
       default:
         throw new Error(`Message type not recognized, ${ msg.data.type }`);
     }
@@ -62,6 +65,7 @@ class TrackingProtectionStudy {
       logo.style.width = 48;
 
       const span = doc.createElement("span");
+      span.id = "tracking-protection-numbers";
       span.style.fontSize = "24px";
       span.style.fontWeight = "lighter";
       span.style.marginLeft = "20px";
@@ -79,6 +83,19 @@ class TrackingProtectionStudy {
       // There's only one <main> element on the new tab page
       const mainEle = doc.getElementsByTagName("main")[0];
       mainEle.prepend(newContainer);
+    }
+  }
+
+  updateTPNumbers(state, doc) {
+    const minutes = state.timeSaved / 1000 / 60;
+    const span = doc.getElementById("tracking-protection-numbers");
+    if (span) {
+      let message = state.newTabMessage;
+      message = message.replace("${blockedRequests}", state.totalBlockedResources);
+      message = message.replace("${blockedCompanies}", state.totalBlockedCompanies);
+      message = message.replace("${blockedSites}", state.totalBlockedWebsites);
+      message = message.replace("${minutes}", minutes.toPrecision(3));
+      span.innerHTML = message;
     }
   }
 }
