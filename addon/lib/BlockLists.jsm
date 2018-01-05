@@ -34,17 +34,7 @@ const blocklists = {
       state.entityList = data;
     });
 
-    // @QUESTION rhelmer: what's this for? Why would they be kept in storage?
-    const allowedHostsPromise = this.getAllowedHostsList().then((allowedHosts) => {
-      state.allowedHosts = allowedHosts;
-    });
-
-    // @QUESTION rhelmer: what's this for? Why would they be kept in storage?
-    const reportedHostsPromise = this.getReportedHostsList().then((reportedHosts) => {
-      state.reportedHosts = reportedHosts;
-    });
-
-    return Promise.all([blockListPromise, entityListPromise, allowedHostsPromise, reportedHostsPromise]);
+    return Promise.all([blockListPromise, entityListPromise]);
   },
 
   loadJSON(url) {
@@ -91,18 +81,6 @@ const blocklists = {
     }
 
     return blocklist;
-  },
-
-  // @QUESTION: rhelmer - what is this list for, and why is it in storage?
-  async getAllowedHostsList() {
-    // TODO retrieve from storage
-    return [];
-  },
-
-  // @QUESTION: rhelmer - what is this list for, and why is it in storage?
-  async getReportedHostsList() {
-    // TODO retrieve from storage
-    return {};
   },
 
   // check if any host from lowest-level to top-level is in the blocklist

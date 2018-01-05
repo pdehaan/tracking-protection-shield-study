@@ -2,8 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-// @QUESTION rhelmer: What would you say is done/left to do? (let's go through the TODOs left by rhelmer)
-
 "use strict";
 
 /* global blocklists */
@@ -121,10 +119,6 @@ class Feature {
       // a map with each key a domain name of a known tracker and each value 
       // the domain name of the owning entity (ex: "facebook.de" -> "facebook.com")
       blocklist: new Map(),
-      // @QUESTION rhelmer: What is this for? Also go into BlockLists.jsm and clarify intent.
-      allowedHosts: new Set(),
-      // @QUESTION rhelmer: What is this for? Also go into BlockLists.jsm and clarify intent.
-      reportedHosts: {},
       // An object where top level keys are owning company names; each company key points
       // to an object with a property and resource key.
       entityList: {},
@@ -135,12 +129,13 @@ class Feature {
       newTabMessage: newtab_messages[0],
       timeSave: 0,
       // a <browser>:counter map for the number of blocked resources for a particular browser
-      // @QUESTION rhelmer: Why is this mapped with <browser>?
+      // Why is this mapped with <browser>?
+      // You may have the same site in multiple tabs; should you use the same counter for both?
+      // the <browser> element is per tab. Fox News in two different tabs wouldn't share the same counter.
+      // if didn't do this, you might get two tabs loading the same page trying to update the same counter.
       blockedResources: new Map(),
       // TODO bdanforth: reset to 0 after testing
       totalBlockedResources: 1,
-      // @QUESTION rhelmer: Why do we want to keep track of total allowed resources?
-      totalAllowedResources: 0,
       blockedCompanies: new Set(),
       totalBlockedCompanies: 0,
       blockedWebsites: new Set(),
@@ -224,8 +219,10 @@ class Feature {
     };
 
     // Note: With "npm run firefox", panel does not open correctly without a delay
-    // Without timer, I see the panel flash briefly toward the bottom of the screen before being removed
-    // @QUESTION rhelmer: Why?
+    // Without delay, the panel flashes briefly toward the bottom of the screen before being removed. Why?
+    // This likely has something to do with how the Selenium WebDriver script at "npm run firefox" starts up Firefox.
+    // rhelmer's recommendation: Try running this in mozilla-central (use MochiTest equivalent instead of Selenium WebDriver),
+    // where we have custom CI/test runners that are maintained by Mozilla and much more thorough than any one-off set-up.
     win.setTimeout(() => {
       win.PopupNotifications.show(
         win.gBrowser.selectedBrowser,
@@ -305,17 +302,11 @@ class Feature {
           counter = this.state.blockedResources.get(details.browser);
         }
         counter++;
-
-        // TODO enable allowed hosts.
-        if (this.lists.allowedHosts.includes(currentHost)) {
-          this.state.totalAllowedResources += 1;
-        } else {
-          this.state.totalBlockedResources += 1;
-          Services.mm.broadcastAsyncMessage("TrackingStudy:Totals", {
-            type: "updateTPNumbers",
-            state: this.state,
-          });
-        }
+        this.state.totalBlockedResources += 1;
+        Services.mm.broadcastAsyncMessage("TrackingStudy:Totals", {
+          type: "updateTPNumbers",
+          state: this.state,
+        });
 
         const rootDomainHost = this.getRootDomain(host);
         const rootDomainCurrentHost = this.getRootDomain(currentHost);
@@ -414,22 +405,13 @@ class Feature {
     const enabled = doc.createElementNS(XUL_NS, "radio");
     enabled.setAttribute("label", "Enable on this site");
     enabled.addEventListener("click", () => {
-      if (this.lists.allowedHosts.includes(currentHost)) {
-        this.lists.allowedHosts.delete(currentHost);
-      }
       win.gBrowser.reload();
     });
     const disabled = doc.createElementNS(XUL_NS, "radio");
     disabled.setAttribute("label", "Disable on this site");
     disabled.addEventListener("click", () => {
-      this.lists.allowedHosts.add(currentHost);
       win.gBrowser.reload();
     });
-    if (this.lists.allowedHosts.includes(currentHost)) {
-      disabled.setAttribute("selected", true);
-    } else {
-      enabled.setAttribute("selected", true);
-    }
     group.append(enabled);
     group.append(disabled);
     controls.append(group);
@@ -446,11 +428,7 @@ class Feature {
     panel.append(panelBox);
 
     button = doc.createElementNS(XUL_NS, "toolbarbutton");
-    if (this.lists.allowedHosts.includes(currentHost)) {
-      button.style.backgroundColor = "yellow";
-    } else {
-      button.style.backgroundColor = "green";
-    }
+    button.style.backgroundColor = "green";
     button.setAttribute("id", "tracking-protection-study-button");
     button.setAttribute("image", "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled");
     button.append(panel);
@@ -478,7 +456,9 @@ class Feature {
 
   /**
   * Called when a non-focused tab is selected.
-  * @QUESTION rhelmer: What does this method do exactly? (confirm my comments below)
+  * If have CNN in one tab (with blocked elements) and Fox in another, go to Fox tab and back to CNN, you want
+  * counter to change back to CNN count.
+  * Only one icon in URL across all tabs, have to update it per page.
   */
   onTabChange(evt) {
     const win = evt.target.ownerGlobal;
@@ -517,14 +497,13 @@ class Feature {
     if (win && win.gBrowser) {
       win.gBrowser.addTabsProgressListener(this);
       win.gBrowser.tabContainer.addEventListener("TabSelect", this.onTabChange.bind(this));
-      // TODO bdanforth: Remove this listener after asking rhelmer about it; now essentially the same
-      // as "addContentToNewTab" method in frame script.
-      // @QUESTION rhelmer: This "load" event is not firing on page loads; how can we listen for this event in a JSM?
+      // TODO bdanforth: ask in #fx-team:
+      // This "load" event is not firing on page loads; how can we listen for this event in a JSM?
       // Does each webpages load event bubble up to parent window?
       // At this point, when the parent window has loaded, what is the appropriate listener
       // to register to say when a page in this browser has finished loading and can be modified?
       // I currently do this in the frame script, since this method was not firing as expected.
-      // onPageLoad function was removed, but it can be found here: https://github.com/rhelmer/tracking-protection-study/blob/9376b607d51a164d2604f5fcde5a777bd8936187/Study.jsm#L257
+      // onPageLoad function was removed, but it can be found here: https://tinyurl.com/y8kh9g6r
       // win.addEventListener("load", () => this.onPageLoad);
     }
   }
