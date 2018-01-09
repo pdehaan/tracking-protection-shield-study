@@ -42,7 +42,7 @@ XPCOMUtils.defineLazyServiceGetter(this, "styleSheetService",
 Cu.importGlobalProperties(["URL"]);
 
 // Import addon-specific modules
-const BASE = "tracking-protection-messaging";
+const BASE = "tracking-protection-messaging-study";
 XPCOMUtils.defineLazyModuleGetter(this, "canonicalizeHost",
   `resource://${BASE}/lib/Canonicalize.jsm`);
 XPCOMUtils.defineLazyModuleGetter(this, "blocklists",
@@ -199,6 +199,11 @@ class Feature {
   */
   showIntroPanel(win, message, url) {
     // Only show intro panel when the addon was just installed
+    // Note: When testing with `npm run firefox`, ADDON_INSTALL
+    // is always the reason code when Firefox starts up.
+    // Conversely, when testing with `./mach build` and 
+    // `./mach run` in the tree, ADDON_STARTUP is always the
+    // reason code when Firefox starts up.
     if (this.reasonName !== "ADDON_INSTALL") {
       return;
     }

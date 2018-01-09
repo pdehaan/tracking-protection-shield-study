@@ -1,16 +1,16 @@
 {
-  "name": "tracking-protection-messaging-shield-study",
+  "name": "tracking-protection-messaging-study",
   "description": "Tracking Protection Messaging Shield Study",
   "version": "1.2.0",
   "author": "Mozilla Bianca Danforth <bdanforth@mozilla.com>",
   "addon": {
     "$ABOUT": "use these variables fill the moustache templates",
-    "id": "tracking-protection-messaging@shield-study.mozilla.com",
+    "id": "tracking-protection-messaging-study@shield-study.mozilla.com",
     "name": "Button Icon Preference Study (Shield Study Example)",
     "minVersion": "57.0",
     "maxVersion": "*",
     "multiprocessCompatible": true,
-    "hasEmbeddedWebExtension": true,
+    "hasEmbeddedWebExtension": false,
     "chromeResource": "tracking-protection-messaging",
     "creator": "Bianca Danforth <bdanforth@mozilla.com>",
     "description": "Tracking Protection Messaging Shield Study",
@@ -60,7 +60,7 @@
     "url": "git://github.com/biancadanforth/tracking-protection-shield-study.git"
   },
   "scripts": {
-    "build": "bash ./bin/xpi.sh",
+    "build": "bash ./bin/xpi.sh ; bash ./bin/mach-test.sh",
     "eslint": "eslint addon test --ext jsm --ext js --ext json",
     "lint": "npm-run-all lint:*",
     "lint:addons-linter": "# actually a post build test:  bin/addonLintTest ' + require('./package.json').name",

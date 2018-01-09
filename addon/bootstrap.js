@@ -18,17 +18,17 @@ XPCOMUtils.defineLazyGetter(this, "log", () => {
   return new ConsoleAPI(consoleOptions);
 });
 
-const CONFIGPATH = `${__SCRIPT_URI_SPEC__}/../Config.jsm`;
+const BASE = "tracking-protection-messaging-study";
+const CONFIGPATH = `resource://${BASE}/lib/Config.jsm`;
 const { config } = Cu.import(CONFIGPATH, {});
 
-const STUDYUTILSPATH = `${__SCRIPT_URI_SPEC__}/../${config.studyUtilsPath}`;
+const STUDYUTILSPATH = `resource://${BASE}/lib/StudyUtils.jsm`;
 const { studyUtils } = Cu.import(STUDYUTILSPATH, {});
 
 const REASONS = studyUtils.REASONS;
 const UI_AVAILABLE_NOTIFICATION = "browser-delayed-startup-finished";
 
 // Study-specific modules
-const BASE = "tracking-protection-messaging";
 XPCOMUtils.defineLazyModuleGetter(this, "Feature", `resource://${BASE}/lib/Feature.jsm`);
 
 this.Bootstrap = {

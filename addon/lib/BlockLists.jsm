@@ -6,7 +6,7 @@ const { utils: Cu } = Components;
 Cu.importGlobalProperties(["fetch"]);
 
 const EXPORTED_SYMBOLS = ["blocklists"];
-const BASE = "tracking-protection-messaging";
+const BASE = "tracking-protection-messaging-study";
 
 const blocklists = {
   allHosts(host) {
