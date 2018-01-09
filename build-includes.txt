@@ -1,0 +1,8 @@
+bootstrap.js
+install.rdf
+jar.mn
+moz.build
+lib
+test
+skin
+content

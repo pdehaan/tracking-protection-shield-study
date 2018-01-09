@@ -9,11 +9,11 @@ XPCOMUtils.defineLazyModuleGetter(this, "Services",
   "resource://gre/modules/Services.jsm");
 XPCOMUtils.defineLazyModuleGetter(this, "Preferences",
   "resource://gre/modules/Preferences.jsm");
-const STUDY = "tracking-protection-messaging";
+const STUDY = "tracking-protection-messaging-study";
 XPCOMUtils.defineLazyModuleGetter(this, "config",
-  `resource://${STUDY}/Config.jsm`);
+  `resource://${STUDY}/lib/Config.jsm`);
 XPCOMUtils.defineLazyModuleGetter(this, "studyUtils",
-  `resource://${STUDY}/StudyUtils.jsm`);
+  `resource://${STUDY}/lib/StudyUtils.jsm`);
 XPCOMUtils.defineLazyModuleGetter(this, "Feature",
   `resource://${STUDY}/lib/Feature.jsm`);
 

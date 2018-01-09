@@ -37,7 +37,7 @@ XPCOMUtils.defineLazyServiceGetter(this, "styleSheetService",
 // Import URL Web API into module
 Cu.importGlobalProperties(["URL"]);
 // Import addon-specific modules
-const STUDY = "tracking-protection-messaging";
+const STUDY = "tracking-protection-messaging-study";
 XPCOMUtils.defineLazyModuleGetter(this, "canonicalizeHost",
   `resource://${STUDY}/lib/Canonicalize.jsm`);
 XPCOMUtils.defineLazyModuleGetter(this, "blocklists",
@@ -265,6 +265,11 @@ class Feature {
     Services.prefs.setBoolPref(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, false);
 
     // 2. Show intro panel if addon was just installed
+    // Note: When testing with `npm run firefox`, ADDON_INSTALL
+    // is always the reason code when Firefox starts up.
+    // Conversely, when testing with `./mach build` and 
+    // `./mach run` in the tree, ADDON_STARTUP is always the
+    // reason code when Firefox starts up.
     if (this.reasonName === "ADDON_INSTALL") {
       this.shouldShowIntroPanel = true;
     }
@@ -730,7 +735,7 @@ class Feature {
         }
         this.state.totalBlockedResources += 1;
         this.state.totalBlockedAds = Math.floor(this.AD_FRACTION * this.state.totalBlockedResources);
-        
+
         Services.mm.broadcastAsyncMessage("TrackingStudy:UpdateContent", {
           blockedResources: this.state.totalBlockedResources,
           timeSaved: this.state.totalTimeSaved,
