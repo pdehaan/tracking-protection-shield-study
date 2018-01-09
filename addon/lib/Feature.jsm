@@ -2,9 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-// @QUESTION: What would you say is done/left to do? (let's go through the TODOs left by rhelmer)
-// @QUESTION: (If I get a chance to look into it in advance) Why is Issue #6 (counter resetting) happening?
-
 "use strict";
 
 /* global blocklists */
@@ -78,6 +75,106 @@ class Feature {
     this.init(variation.name);
   }
 
+  async init(treatment) {
+
+    // TODO bdanforth: get treatment(s) from bootstrap/studyUtils
+    // define treatments as STRING: fn(browserWindow, url)
+    this.TREATMENTS = {
+      fast: this.showIntroPanel.bind(this), // opens a doorhanger on addon install only
+      private: this.showIntroPanel.bind(this),
+      adBlocking: this.showIntroPanel.bind(this),
+    };
+
+    this.treatment = treatment;
+    // TODO bdanforth: update newtab messages copy
+    const newtab_messages = [
+      "Firefox blocked ${blockedRequests} trackers today<br/> from ${blockedCompanies} companies that track your browsing",
+      "Firefox blocked ${blockedRequests} trackers today<br/> and saved you ${minutes} minutes",
+    ];
+    // TODO bdanforth: update with final URLs
+    const learnMore_urls = [
+      "http://www.mozilla.com",
+    ];
+    // TODO bdanforth: update intro panel message copy
+    this.message = "Tracking protection is great! Would you like to participate in a study?";
+    this.url = learnMore_urls[0];
+
+    // run once now on the most recent window.
+    let win = Services.wm.getMostRecentWindow("navigator:browser");
+
+    // TODO bdanforth: remove if there is no "ALL" treatment, ultimately
+    if (this.treatment === "ALL") {
+      Object.keys(this.TREATMENTS).forEach((key, index) => {
+        if (Object.prototype.hasOwnProperty.call(this.TREATMENTS, key)) {
+          this.TREATMENTS[key](win, this.message, this.url);
+        }
+      });
+    } else if (this.treatment in this.TREATMENTS) {
+      this.TREATMENTS[this.treatment](win, this.message, this.url);
+    }
+
+    // TODO bdanforth: include a doc block with format/content for each list/map/set in
+    // this.lists and this.state
+    this.lists = {
+      // a map with each key a domain name of a known tracker and each value 
+      // the domain name of the owning entity (ex: "facebook.de" -> "facebook.com")
+      blocklist: new Map(),
+      // An object where top level keys are owning company names; each company key points
+      // to an object with a property and resource key.
+      entityList: {},
+    };
+
+    this.state = {
+      // TODO bdanforth: choose message based on treatment branch
+      newTabMessage: newtab_messages[0],
+      timeSave: 0,
+      // a <browser>:counter map for the number of blocked resources for a particular browser
+      // Why is this mapped with <browser>?
+      // You may have the same site in multiple tabs; should you use the same counter for both?
+      // the <browser> element is per tab. Fox News in two different tabs wouldn't share the same counter.
+      // if didn't do this, you might get two tabs loading the same page trying to update the same counter.
+      blockedResources: new Map(),
+      // TODO bdanforth: reset to 0 after testing
+      totalBlockedResources: 1,
+      blockedCompanies: new Set(),
+      totalBlockedCompanies: 0,
+      blockedWebsites: new Set(),
+      totalBlockedWebsites: 0,
+    };
+
+    // populate lists in this.state: blocklist, entityList, etc.
+    await blocklists.loadLists(this.lists);
+
+    const filter = {urls: new win.MatchPatternSet(["*://*/*"])};
+
+    // Tracking protection implementation
+    WebRequest.onBeforeRequest.addListener(
+      this.onBeforeRequest.bind(this),
+      // listener will only be called for requests whose targets match the filter
+      filter,
+      ["blocking"]
+    );
+
+    const uri = Services.io.newURI(STYLESHEET_URL);
+    styleSheetService.loadAndRegisterSheet(uri, styleSheetService.AGENT_SHEET);
+
+    // Add listeners to all open windows.
+    const enumerator = Services.wm.getEnumerator("navigator:browser");
+    while (enumerator.hasMoreElements()) {
+      win = enumerator.getNext();
+      if (win === Services.appShell.hiddenDOMWindow) {
+        continue;
+      }
+
+      this.addWindowEventListeners(win);
+    }
+
+    // Attach to any new windows.
+    // Depending on which event happens (ex: onOpenWindow, onLocationChange),
+    // it will call that listener method that exists on "this"
+    Services.wm.addListener(this);
+  }
+
   /**
   *   Display instrumented 'introductory panel' explaining the feature to the user
   *   Telemetry Probes: (TODO bdanforth: add telemetry probes)
@@ -122,7 +219,10 @@ class Feature {
     };
 
     // Note: With "npm run firefox", panel does not open correctly without a delay
-    // @QUESTION rhelmer: Why?
+    // Without delay, the panel flashes briefly toward the bottom of the screen before being removed. Why?
+    // This likely has something to do with how the Selenium WebDriver script at "npm run firefox" starts up Firefox.
+    // rhelmer's recommendation: Try running this in mozilla-central (use MochiTest equivalent instead of Selenium WebDriver),
+    // where we have custom CI/test runners that are maintained by Mozilla and much more thorough than any one-off set-up.
     win.setTimeout(() => {
       win.PopupNotifications.show(
         win.gBrowser.selectedBrowser,
@@ -136,30 +236,32 @@ class Feature {
     }, 1000);
   }
 
-  // @QUESTION rhelmer: This method is called if event occurs from:
+  // This method is called if event occurs from:
   // Services.wm.addListener(this) in init()
   // Adds event listeners to newly created windows (browser application window)
   // This method is NOT called when opening a new tab.
   onOpenWindow(xulWindow) {
-    console.log("onOpenWindow fired");
     var win = xulWindow.QueryInterface(Ci.nsIInterfaceRequestor)
       .getInterface(Ci.nsIDOMWindowInternal || Ci.nsIDOMWindow);
     win.addEventListener("load", () => this.addWindowEventListeners(win), {once: true});
   }
 
-  // @QUESTION rhelmer: This method is called if event occurs from:
-  // Services.wm.addListener(this) in init() and addWindowEventListeners()
-  // from addTabsProgressListener
-  // This method is called when opening a new tab.
+  // This method is called when opening a new tab among many other times.
+  // This is a listener for the addTabsProgressListener
   // Not appropriate for modifying the page itself because the page hasn't finished
   // loading yet. https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIWebProgressListener
   onLocationChange(browser, progress, request, uri, flags) {
-    console.log("onLocationChange fired");
-    // if tracking protection has blocked any resources for this page
-    if (this.state.blockedResources.has(browser)) {
-      this.showPageAction(browser.getRootNode(), 0);
-      this.setPageActionCounter(browser.getRootNode(), 0);
-      this.state.blockedResources.set(browser, 0);
+    const LOCATION_CHANGE_SAME_DOCUMENT = 1;
+    // ensure the location change event is occuring in the top frame (not an iframe for example)
+    // and also that a different page is being loaded
+    if (progress.isTopLevel && flags !== LOCATION_CHANGE_SAME_DOCUMENT) {
+      // if tracking protection has already blocked any resources for this tab,
+      // reset the counter on the pageAction
+      if (this.state.blockedResources.has(browser)) {
+        this.showPageAction(browser.getRootNode(), 0);
+        this.setPageActionCounter(browser.getRootNode(), 0);
+        this.state.blockedResources.set(browser, 0);
+      }
     }
   }
 
@@ -167,16 +269,21 @@ class Feature {
   * Called when the browser is about to make a network request.
   * @returns {BlockingResponse} object (determines whether or not
   * the request should be cancelled)
+  * If this method returns {}, the request will not be blocked;
+  * if it returns { cancel: true }, the request will be blocked.
   */
   onBeforeRequest(details) {
+    // details.url is the target url for the request
     if (details && details.url && details.browser) {
       const browser = details.browser;
+      // nsIURI object with attributes to set and query the basic components of the browser's current URI
       const currentURI = browser.currentURI;
 
       if (!currentURI) {
         return {};
       }
 
+      // the URL for the entity making the request
       if (!details.originUrl) {
         return {};
       }
@@ -185,33 +292,56 @@ class Feature {
         return {};
       }
 
-      const currentHost = currentURI.host;
-      const host = new URL(details.originUrl).host;
+      const currentHost = currentURI.host; // the domain name for the current page (e.g. www.nytimes.com)
+      const host = new URL(details.originUrl).host; // the domain name for the entity making the request
 
       // Block third-party requests only.
-      if (currentHost !== host && blocklists.hostInBlocklist(this.state.blocklist, host)) {
-        let counter;
+      if (currentHost !== host && blocklists.hostInBlocklist(this.lists.blocklist, host)) {
+        let counter = 0;
         if (this.state.blockedResources.has(details.browser)) {
           counter = this.state.blockedResources.get(details.browser);
-          counter++;
-        } else {
-          counter = 1;
         }
+        counter++;
+        this.state.totalBlockedResources += 1;
+        Services.mm.broadcastAsyncMessage("TrackingStudy:Totals", {
+          type: "updateTPNumbers",
+          state: this.state,
+        });
 
-        // TODO enable allowed hosts.
-        if (this.state.allowedHosts.has(currentHost)) {
-          this.state.totalAllowedResources += 1;
-        } else {
-          this.state.totalBlockedResources += 1;
-        }
+        const rootDomainHost = this.getRootDomain(host);
+        const rootDomainCurrentHost = this.getRootDomain(currentHost);
 
-        const domain = host.split(".");
-        domain.shift();
-        const rootDomain = domain.join(".");
-        for (const entity in this.state.entityList) {
-          if (this.state.entityList[entity].resources.includes(rootDomain)) {
-            this.state.totalBlockedEntities.add(entity);
+        // check if host entity is in the entity list;
+        // TODO bdanforth: improve effeciency of this algo
+        // see https://github.com/mozilla/blok/blob/master/src/js/requests.js#L18-L27
+        // for a much more efficient implementation
+        for (const entity in this.lists.entityList) {
+          if (this.lists.entityList[entity].resources.includes(rootDomainHost)) {
+            // This just means that this "host" is contained in the entity list
+            // and owned by "entity"
+            // but we have to check and see if the "currentHost" is also owned by
+            // "entity"
+            // if it is, don't block the request; if it isn't, block the request and
+            // add the entity to the list of "blockedCompanies" 
+            if (this.lists.entityList[entity].resources.includes(rootDomainCurrentHost)
+              || this.lists.entityList[entity].properties.includes(rootDomainCurrentHost)) {
+              return {};
+            }
+            this.state.blockedCompanies.add(entity);
+            this.state.totalBlockedCompanies = this.state.blockedCompanies.size;
+            Services.mm.broadcastAsyncMessage("TrackingStudy:Totals", {
+              type: "updateTPNumbers",
+              state: this.state,
+            });
           }
+        }
+
+        // If we get this far, we're going to block the request.
+
+        // Add host to blockedWebsites if not already present
+        if (!this.state.blockedWebsites.has(host)) {
+          this.state.blockedWebsites.add(host);
+          this.state.totalBlockedWebsites = this.state.blockedWebsites.size;
         }
 
         this.state.blockedResources.set(details.browser, counter);
@@ -234,6 +364,13 @@ class Feature {
       }
     }
     return {};
+  }
+
+  // e.g. takes "www.mozilla.com", and turns it into "mozilla.com"
+  getRootDomain(host) {
+    const domain = host.split(".");
+    domain.shift();
+    return domain.join(".");
   }
 
   /**
@@ -268,22 +405,13 @@ class Feature {
     const enabled = doc.createElementNS(XUL_NS, "radio");
     enabled.setAttribute("label", "Enable on this site");
     enabled.addEventListener("click", () => {
-      if (this.state.allowedHosts.has(currentHost)) {
-        this.state.allowedHosts.delete(currentHost);
-      }
       win.gBrowser.reload();
     });
     const disabled = doc.createElementNS(XUL_NS, "radio");
     disabled.setAttribute("label", "Disable on this site");
     disabled.addEventListener("click", () => {
-      this.state.allowedHosts.add(currentHost);
       win.gBrowser.reload();
     });
-    if (this.state.allowedHosts.has(currentHost)) {
-      disabled.setAttribute("selected", true);
-    } else {
-      enabled.setAttribute("selected", true);
-    }
     group.append(enabled);
     group.append(disabled);
     controls.append(group);
@@ -300,11 +428,7 @@ class Feature {
     panel.append(panelBox);
 
     button = doc.createElementNS(XUL_NS, "toolbarbutton");
-    if (this.state.allowedHosts.has(currentHost)) {
-      button.style.backgroundColor = "yellow";
-    } else {
-      button.style.backgroundColor = "green";
-    }
+    button.style.backgroundColor = "green";
     button.setAttribute("id", "tracking-protection-study-button");
     button.setAttribute("image", "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled");
     button.append(panel);
@@ -332,11 +456,14 @@ class Feature {
 
   /**
   * Called when a non-focused tab is selected.
-  * @QUESTION rhelmer: What does this method do exactly?
+  * If have CNN in one tab (with blocked elements) and Fox in another, go to Fox tab and back to CNN, you want
+  * counter to change back to CNN count.
+  * Only one icon in URL across all tabs, have to update it per page.
   */
   onTabChange(evt) {
     const win = evt.target.ownerGlobal;
     const currentURI = win.gBrowser.currentURI;
+    // Don't show the page action if page is not http or https
     if (currentURI.scheme !== "http" && currentURI.scheme !== "https") {
       this.hidePageAction(win.document);
       return;
@@ -357,87 +484,6 @@ class Feature {
     }
   }
 
-  async init(treatment) {
-
-    // TODO bdanforth: get treatment(s) from bootstrap/studyUtils
-    // define treatments as STRING: fn(browserWindow, url)
-    this.TREATMENTS = {
-      fast: this.showIntroPanel.bind(this), // opens a doorhanger on addon install only
-      private: this.showIntroPanel.bind(this),
-      adBlocking: this.showIntroPanel.bind(this),
-    };
-
-    this.treatment = treatment;
-    // TODO bdanforth: update newtab messages copy
-    const newtab_messages = [
-      "Firefox blocked ${blockedRequests} trackers today<br/> from ${blockedEntities} companies that track your browsing",
-      "Firefox blocked ${blockedRequests} trackers today<br/> and saved you ${minutes} minutes",
-      "Firefox blocked ${blockedRequests} ads today from<br/> ${blockedSites} different websites",
-    ];
-    // TODO bdanforth: update with final URLs
-    const learnMore_urls = [
-      "http://www.mozilla.com",
-    ];
-    // TODO bdanforth: update intro panel message copy
-    this.message = "Tracking protection is great! Would you like to participate in a study?";
-    this.url = learnMore_urls[0];
-
-    // run once now on the most recent window.
-    let win = Services.wm.getMostRecentWindow("navigator:browser");
-
-    // TODO bdanforth: remove if there is no "ALL" treatment, ultimately
-    if (this.treatment === "ALL") {
-      Object.keys(this.TREATMENTS).forEach((key, index) => {
-        if (Object.prototype.hasOwnProperty.call(this.TREATMENTS, key)) {
-          this.TREATMENTS[key](win, this.message, this.url);
-        }
-      });
-    } else if (this.treatment in this.TREATMENTS) {
-      this.TREATMENTS[this.treatment](win, this.message, this.url);
-    }
-
-    this.state = {
-      // TODO bdanforth: choose message based on treatment branch
-      newTabMessage: newtab_messages[0],
-      timeSave: 0,
-      blocklist: new Map(),
-      allowedHosts: new Set(),
-      reportedHosts: {},
-      entityList: {},
-      blockedResources: new Map(),
-      // TODO bdanforth: reset to 0 after testing
-      totalBlockedResources: 1,
-      totalAllowedResources: 0,
-      totalBlockedEntities: new Set(),
-    };
-
-    await blocklists.loadLists(this.state);
-
-    const filter = {urls: new win.MatchPatternSet(["*://*/*"])};
-    this.onBeforeRequest = this.onBeforeRequest.bind(this);
-
-    WebRequest.onBeforeRequest.addListener(this.onBeforeRequest, filter, ["blocking"]);
-
-    const uri = Services.io.newURI(STYLESHEET_URL);
-    styleSheetService.loadAndRegisterSheet(uri, styleSheetService.AGENT_SHEET);
-
-    // Add listeners to all open windows.
-    const enumerator = Services.wm.getEnumerator("navigator:browser");
-    while (enumerator.hasMoreElements()) {
-      win = enumerator.getNext();
-      if (win === Services.appShell.hiddenDOMWindow) {
-        continue;
-      }
-
-      this.addWindowEventListeners(win);
-    }
-
-    // Attach to any new windows.
-    // Depending on which event happens (ex: onOpenWindow, onLocationChange),
-    // it will call that listener method that exists on "this"
-    Services.wm.addListener(this);
-  }
-
   /**
   * Three cases of user looking at diff page:
       - switched windows (onOpenWindow)
@@ -451,12 +497,13 @@ class Feature {
     if (win && win.gBrowser) {
       win.gBrowser.addTabsProgressListener(this);
       win.gBrowser.tabContainer.addEventListener("TabSelect", this.onTabChange.bind(this));
-      // TODO bdanforth: Remove this listener after asking rhelmer about it; now essentially the same
-      // as "addContentToNewTab" method in frame script.
-      // @QUESTION rhelmer: This "load" event is not firing on page loads
+      // TODO bdanforth: ask in #fx-team:
+      // This "load" event is not firing on page loads; how can we listen for this event in a JSM?
       // Does each webpages load event bubble up to parent window?
       // At this point, when the parent window has loaded, what is the appropriate listener
       // to register to say when a page in this browser has finished loading and can be modified?
+      // I currently do this in the frame script, since this method was not firing as expected.
+      // onPageLoad function was removed, but it can be found here: https://tinyurl.com/y8kh9g6r
       // win.addEventListener("load", () => this.onPageLoad);
     }
   }

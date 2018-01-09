@@ -24,21 +24,17 @@ const blocklists = {
       state.blocklist = this.processBlockListJSON(data);
     });
 
+    /*
+    * The Entity list whitelists different domains that are wholly owned by the same company
+    disconnect-entitylist.json, where:
+    - 'properties' keys are first parties
+    - 'resources' keys are third parties
+    */
     const entityListPromise = this.loadJSON(`resource://${BASE}/lib/disconnect-entitylist.json`).then((data) => {
       state.entityList = data;
     });
 
-    // TODO bdanforth: figure out why this is commented out
-    // const allowedHostsPromise = this.getAllowedHostsList().then((allowedHosts) => {
-    //   state.allowedHosts = allowedHosts
-    // })
-
-    const reportedHostsPromise = this.getReportedHostsList().then((reportedHosts) => {
-      state.reportedHosts = reportedHosts;
-    });
-
-    // return Promise.all([blockListPromise, entityListPromise, allowedHostsPromise, reportedHostsPromise])
-    return Promise.all([blockListPromise, entityListPromise, reportedHostsPromise]);
+    return Promise.all([blockListPromise, entityListPromise]);
   },
 
   loadJSON(url) {
@@ -85,16 +81,6 @@ const blocklists = {
     }
 
     return blocklist;
-  },
-
-  async getAllowedHostsList() {
-    // TODO retrieve from storage
-    return [];
-  },
-
-  async getReportedHostsList() {
-    // TODO retrieve from storage
-    return {};
   },
 
   // check if any host from lowest-level to top-level is in the blocklist
