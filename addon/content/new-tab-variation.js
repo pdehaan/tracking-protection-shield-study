@@ -7,7 +7,7 @@
 const ABOUT_HOME_URL = "about:home";
 const ABOUT_NEWTAB_URL = "about:newtab";
 // for calculating time saved per page
-const LOAD_START_TIME = Date.now() / 1000 / 60;
+const LOAD_START_TIME = Date.now();
 
 class TrackingProtectionStudy {
   constructor(contentWindow) {
@@ -40,17 +40,15 @@ class TrackingProtectionStudy {
   }
 
   addContentToNewTab(state, doc) {
-    // TODO bdanforth: Ideally: Update numbers dynamically on page even without refresh?
-    const minutes = state.totalTimeSaved;
+    const minutes = state.totalTimeSaved / 1000 / 60;
     // FIXME commented out for testing
-    // if (minutes >= 1 && this.blockedRequests) {
     // if we haven't blocked anything yet, don't modify the page
-    if (state.totalBlockedResources) {
+    if (true/*state.totalBlockedResources && minutes >= 1*/) {
       let message = state.newTabMessage;
       message = message.replace("${blockedRequests}", state.totalBlockedResources);
       message = message.replace("${blockedCompanies}", state.totalBlockedCompanies);
       message = message.replace("${blockedSites}", state.totalBlockedWebsites);
-      message = message.replace("${minutes}", minutes.toPrecision(3));
+      message = message.replace("${minutes}", minutes.toFixed(2));
 
       // Check if the study UI has already been added to this page
       const tpContent = doc.getElementById("tracking-protection-message");
@@ -89,15 +87,14 @@ class TrackingProtectionStudy {
   }
 
   updateTPNumbers(state, doc) {
-    const minutes = state.totalTimeSaved;
-    console.log(minutes);
+    const minutes = state.totalTimeSaved / 1000 / 60;
     const span = doc.getElementById("tracking-protection-numbers");
     if (span) {
       let message = state.newTabMessage;
       message = message.replace("${blockedRequests}", state.totalBlockedResources);
       message = message.replace("${blockedCompanies}", state.totalBlockedCompanies);
       message = message.replace("${blockedSites}", state.totalBlockedWebsites);
-      message = message.replace("${minutes}", minutes);
+      message = message.replace("${minutes}", minutes.toFixed(2));
       span.innerHTML = message;
     }
   }
@@ -105,10 +102,10 @@ class TrackingProtectionStudy {
 
 // estimate the amount of per page load time saved in minutes
 function getTimeSaved(pageStartTime) {
-  const pageEndTime = Date.now() / 1000 / 60;
+  const pageEndTime = Date.now();
   // TP estimated to save 44% page load time: https://tinyurl.com/l4mnbol
   const timeSaved = 0.44 * (pageEndTime - pageStartTime);
-  return timeSaved.toFixed(4);
+  return timeSaved; // in ms
 }
 
 addEventListener("load", function onLoad(evt) {

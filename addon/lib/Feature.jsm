@@ -134,7 +134,7 @@ class Feature {
       // if didn't do this, you might get two tabs loading the same page trying to update the same counter.
       blockedResources: new Map(),
       // TODO bdanforth: reset to 0 after testing
-      totalBlockedResources: 1,
+      totalBlockedResources: 0,
       blockedCompanies: new Set(),
       totalBlockedCompanies: 0,
       blockedWebsites: new Set(),
@@ -554,8 +554,7 @@ class Feature {
         });
         break;
       case "update-time-saved":
-        this.state.totalTimeSaved += Number.parseFloat(msg.data.timeSaved);
-        // TODO bdanforth: minimize number of decimal places after 0.
+        this.state.totalTimeSaved += Number.parseInt(msg.data.timeSaved);
         break;
       default:
         throw new Error(`Message type not recognized, ${ msg.data.action }`);
