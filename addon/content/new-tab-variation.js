@@ -89,7 +89,7 @@ class TrackingProtectionStudy {
   }
 
   updateTPNumbers(state, doc) {
-    const minutes = state.timeSaved;
+    const minutes = state.totalTimeSaved;
     console.log(minutes);
     const span = doc.getElementById("tracking-protection-numbers");
     if (span) {
@@ -122,11 +122,15 @@ addEventListener("load", function onLoad(evt) {
       sendAsyncMessage("TrackingStudy:OnContentMessage", {action: "get-totals"});
     });
   } else if (protocol === "http:" || protocol === "https:") {
-    const timeSaved = getTimeSaved(LOAD_START_TIME);
-    sendAsyncMessage("TrackingStudy:OnContentMessage",
-      {
-        action: "update-time-saved",
-        timeSaved,
-      });
+    // only want pages user navigates to directly
+    if (evt.target.referrer === "") {
+      const timeSaved = getTimeSaved(LOAD_START_TIME);
+      sendAsyncMessage("TrackingStudy:OnContentMessage",
+        {
+          action: "update-time-saved",
+          timeSaved,
+        }
+      );
+    }
   }
 }, true);
