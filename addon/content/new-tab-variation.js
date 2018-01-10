@@ -6,6 +6,8 @@
 
 const ABOUT_HOME_URL = "about:home";
 const ABOUT_NEWTAB_URL = "about:newtab";
+// for calculating time saved per page
+const LOAD_START_TIME = Date.now() / 1000 / 60;
 
 class TrackingProtectionStudy {
   constructor(contentWindow) {
@@ -39,7 +41,7 @@ class TrackingProtectionStudy {
 
   addContentToNewTab(state, doc) {
     // TODO bdanforth: Ideally: Update numbers dynamically on page even without refresh?
-    const minutes = state.timeSaved / 1000 / 60;
+    const minutes = state.totalTimeSaved;
     // FIXME commented out for testing
     // if (minutes >= 1 && this.blockedRequests) {
     // if we haven't blocked anything yet, don't modify the page
@@ -87,27 +89,44 @@ class TrackingProtectionStudy {
   }
 
   updateTPNumbers(state, doc) {
-    const minutes = state.timeSaved / 1000 / 60;
+    const minutes = state.timeSaved;
+    console.log(minutes);
     const span = doc.getElementById("tracking-protection-numbers");
     if (span) {
       let message = state.newTabMessage;
       message = message.replace("${blockedRequests}", state.totalBlockedResources);
       message = message.replace("${blockedCompanies}", state.totalBlockedCompanies);
       message = message.replace("${blockedSites}", state.totalBlockedWebsites);
-      message = message.replace("${minutes}", minutes.toPrecision(3));
+      message = message.replace("${minutes}", minutes);
       span.innerHTML = message;
     }
   }
 }
 
+// estimate the amount of per page load time saved in minutes
+function getTimeSaved(pageStartTime) {
+  const pageEndTime = Date.now() / 1000 / 60;
+  // TP estimated to save 44% page load time: https://tinyurl.com/l4mnbol
+  const timeSaved = 0.44 * (pageEndTime - pageStartTime);
+  return timeSaved.toFixed(4);
+}
+
 addEventListener("load", function onLoad(evt) {
   const window = evt.target.defaultView;
   const location = window.location.href;
+  const protocol = window.location.protocol;
   if (location === ABOUT_NEWTAB_URL || location === ABOUT_HOME_URL) {
     // queues a function to be called during a browser's idle periods
     window.requestIdleCallback(() => {
       new TrackingProtectionStudy(window);
       sendAsyncMessage("TrackingStudy:OnContentMessage", {action: "get-totals"});
     });
+  } else if (protocol === "http:" || protocol === "https:") {
+    const timeSaved = getTimeSaved(LOAD_START_TIME);
+    sendAsyncMessage("TrackingStudy:OnContentMessage",
+      {
+        action: "update-time-saved",
+        timeSaved,
+      });
   }
 }, true);

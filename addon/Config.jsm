@@ -96,10 +96,10 @@ var config = {
   "weightedVariations": [
     {"name": "fast",
       "weight": 1.5},
-    {"name": "private",
-      "weight": 1.5},
-    {"name": "adBlocking",
-      "weight": 1},
+    // {"name": "private",
+    //   "weight": 1.5},
+    // {"name": "control",
+    //   "weight": 1},
   ],
 
 

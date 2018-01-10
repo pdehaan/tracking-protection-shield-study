@@ -76,21 +76,20 @@ class Feature {
   }
 
   async init(treatment) {
-
+    console.log(treatment);
     // TODO bdanforth: get treatment(s) from bootstrap/studyUtils
     // define treatments as STRING: fn(browserWindow, url)
     this.TREATMENTS = {
       fast: this.showIntroPanel.bind(this), // opens a doorhanger on addon install only
       private: this.showIntroPanel.bind(this),
-      adBlocking: this.showIntroPanel.bind(this),
     };
 
     this.treatment = treatment;
     // TODO bdanforth: update newtab messages copy
-    const newtab_messages = [
-      "Firefox blocked ${blockedRequests} trackers today<br/> from ${blockedCompanies} companies that track your browsing",
-      "Firefox blocked ${blockedRequests} trackers today<br/> and saved you ${minutes} minutes",
-    ];
+    const newtab_messages = {
+      fast: "Firefox blocked ${blockedRequests} trackers today<br/> and saved you ${minutes} minutes",
+      private: "Firefox blocked ${blockedRequests} trackers today<br/> from ${blockedCompanies} companies that track your browsing",
+    };
     // TODO bdanforth: update with final URLs
     const learnMore_urls = [
       "http://www.mozilla.com",
@@ -126,8 +125,8 @@ class Feature {
 
     this.state = {
       // TODO bdanforth: choose message based on treatment branch
-      newTabMessage: newtab_messages[0],
-      timeSave: 0,
+      newTabMessage: newtab_messages[this.treatment],
+      totalTimeSaved: 0,
       // a <browser>:counter map for the number of blocked resources for a particular browser
       // Why is this mapped with <browser>?
       // You may have the same site in multiple tabs; should you use the same counter for both?
@@ -553,6 +552,10 @@ class Feature {
           type: "newTabContent",
           state: this.state,
         });
+        break;
+      case "update-time-saved":
+        this.state.totalTimeSaved += Number.parseFloat(msg.data.timeSaved);
+        // TODO bdanforth: minimize number of decimal places after 0.
         break;
       default:
         throw new Error(`Message type not recognized, ${ msg.data.action }`);
