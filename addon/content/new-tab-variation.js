@@ -6,8 +6,6 @@
 
 const ABOUT_HOME_URL = "about:home";
 const ABOUT_NEWTAB_URL = "about:newtab";
-// for calculating time saved per page
-const LOAD_START_TIME = Date.now();
 
 class TrackingProtectionStudy {
   constructor(contentWindow) {
@@ -101,12 +99,14 @@ class TrackingProtectionStudy {
 }
 
 // estimate the amount of per page load time saved in minutes
-function getTimeSaved(pageStartTime) {
-  const pageEndTime = Date.now();
+function getTimeSaved(loadTime) {
   // TP estimated to save 44% page load time: https://tinyurl.com/l4mnbol
-  const timeSaved = 0.44 * (pageEndTime - pageStartTime);
+  const timeSaved = 0.44 * loadTime;
   return timeSaved; // in ms
 }
+
+let prevLoadTime = 0;
+let prevLocation;
 
 addEventListener("load", function onLoad(evt) {
   const window = evt.target.defaultView;
@@ -121,13 +121,32 @@ addEventListener("load", function onLoad(evt) {
   } else if (protocol === "http:" || protocol === "https:") {
     // only want pages user navigates to directly
     if (evt.target.referrer === "") {
-      const timeSaved = getTimeSaved(LOAD_START_TIME);
-      sendAsyncMessage("TrackingStudy:OnContentMessage",
-        {
-          action: "update-time-saved",
-          timeSaved,
-        }
-      );
+      if (!prevLocation) {
+        prevLocation = location;
+      }
+      // see https://developer.mozilla.org/en-US/docs/Web/API/PerformanceTiming
+      const loadTime = window.performance.timing.loadEventStart - window.performance.timing.domLoading;
+      // some sites (e.g. nytimes.com) have multiple "load" events in the frame script for the same site
+      if (loadTime > prevLoadTime) {
+        prevLoadTime = loadTime;
+        const timeSaved = getTimeSaved(loadTime);
+        sendAsyncMessage("TrackingStudy:OnContentMessage",
+          {
+            action: "update-time-saved",
+            timeSaved,
+          }
+        );
+      } else if (prevLocation !== location) {
+        prevLoadTime = 0;
+        prevLocation = location;
+        const timeSaved = getTimeSaved(loadTime);
+        sendAsyncMessage("TrackingStudy:OnContentMessage",
+          {
+            action: "update-time-saved",
+            timeSaved,
+          }
+        );
+      }
     }
   }
 }, true);
