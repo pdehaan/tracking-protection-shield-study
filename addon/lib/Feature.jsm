@@ -444,7 +444,9 @@ class Feature {
   setPageActionCounter(doc, counter) {
     const toolbarButton = doc.getElementById("tracking-protection-study-button");
     if (toolbarButton) {
-      toolbarButton.setAttribute("label", counter);
+      // if "fast" treatment, convert counter from ms to seconds and add unit "s"
+      const label = this.treatment === "private" ? counter : `${Math.round(counter / 1000)}s`;
+      toolbarButton.setAttribute("label", label);
     }
   }
 
