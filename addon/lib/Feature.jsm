@@ -76,21 +76,19 @@ class Feature {
   }
 
   async init(treatment) {
-
     // TODO bdanforth: get treatment(s) from bootstrap/studyUtils
     // define treatments as STRING: fn(browserWindow, url)
     this.TREATMENTS = {
       fast: this.showIntroPanel.bind(this), // opens a doorhanger on addon install only
       private: this.showIntroPanel.bind(this),
-      adBlocking: this.showIntroPanel.bind(this),
     };
 
     this.treatment = treatment;
     // TODO bdanforth: update newtab messages copy
-    const newtab_messages = [
-      "Firefox blocked ${blockedRequests} trackers today<br/> from ${blockedCompanies} companies that track your browsing",
-      "Firefox blocked ${blockedRequests} trackers today<br/> and saved you ${minutes} minutes",
-    ];
+    const newtab_messages = {
+      fast: "Firefox blocked ${blockedRequests} trackers today<br/> and saved you ${minutes} minutes",
+      private: "Firefox blocked ${blockedRequests} trackers today<br/> from ${blockedCompanies} companies that track your browsing",
+    };
     // TODO bdanforth: update with final URLs
     const learnMore_urls = [
       "http://www.mozilla.com",
@@ -125,17 +123,17 @@ class Feature {
     };
 
     this.state = {
-      // TODO bdanforth: choose message based on treatment branch
-      newTabMessage: newtab_messages[0],
-      timeSave: 0,
+      newTabMessage: newtab_messages[this.treatment],
+      totalTimeSaved: 0,
+      // a <browser>:counter map for the number of milliseconds saved for a particular browser
+      timeSaved: new Map(),
       // a <browser>:counter map for the number of blocked resources for a particular browser
       // Why is this mapped with <browser>?
       // You may have the same site in multiple tabs; should you use the same counter for both?
       // the <browser> element is per tab. Fox News in two different tabs wouldn't share the same counter.
       // if didn't do this, you might get two tabs loading the same page trying to update the same counter.
       blockedResources: new Map(),
-      // TODO bdanforth: reset to 0 after testing
-      totalBlockedResources: 1,
+      totalBlockedResources: 0,
       blockedCompanies: new Set(),
       totalBlockedCompanies: 0,
       blockedWebsites: new Set(),
@@ -261,6 +259,7 @@ class Feature {
         this.showPageAction(browser.getRootNode(), 0);
         this.setPageActionCounter(browser.getRootNode(), 0);
         this.state.blockedResources.set(browser, 0);
+        this.state.timeSaved.set(browser, 0);
       }
     }
   }
@@ -355,7 +354,9 @@ class Feature {
             continue;
           }
 
-          if (details.browser === win.gBrowser.selectedBrowser) {
+          // only update pageAction with new blocked requests if we're in the "private" treatment branch
+          // otherwise we want to display timeSaved for the "fast" treatment branch in the badge
+          if (details.browser === win.gBrowser.selectedBrowser && this.treatment === "private") {
             this.showPageAction(browser.getRootNode(), counter);
             this.setPageActionCounter(browser.getRootNode(), counter);
           }
@@ -443,7 +444,9 @@ class Feature {
   setPageActionCounter(doc, counter) {
     const toolbarButton = doc.getElementById("tracking-protection-study-button");
     if (toolbarButton) {
-      toolbarButton.setAttribute("label", counter);
+      // if "fast" treatment, convert counter from ms to seconds and add unit "s"
+      const label = this.treatment === "private" ? counter : `${Math.round(counter / 1000)}s`;
+      toolbarButton.setAttribute("label", label);
     }
   }
 
@@ -475,8 +478,10 @@ class Feature {
     // of the pageAction, then reshow it if the new page has had any resources blocked.
     if (win === currentWin) {
       this.hidePageAction(win.document);
-      const counter = this.state.blockedResources.get(win.gBrowser.selectedBrowser);
-
+      // depending on the treatment branch, we want the count of timeSaved ("fast") or blockedResources ("private")
+      const counter = this.treatment === "private" ?
+        this.state.blockedResources.get(win.gBrowser.selectedBrowser) :
+        this.state.timeSaved.get(win.gBrowser.selectedBrowser);
       if (counter) {
         this.showPageAction(win.document, counter);
         this.setPageActionCounter(win.document, counter);
@@ -546,13 +551,28 @@ class Feature {
   }
 
   handleMessageFromContent(msg) {
+    let counter;
+    let browser;
     switch (msg.data.action) {
       case "get-totals":
       // TODO bdanforth: update what text is shown based on treatment branch
+      // msg.target is the <browser> element
         msg.target.messageManager.sendAsyncMessage("TrackingStudy:Totals", {
           type: "newTabContent",
           state: this.state,
         });
+        break;
+      case "update-time-saved":
+        // TODO bdanforth: control how to update timeSaved counter when:
+        //  - the same page is refreshed (timeSaved counter should reset)
+        //  - the user visits another page in the same tab (timeSaved counter should reset)
+        //  - other cases? See how rhelmer handles updating this.state.blockedResources
+        counter = Number.parseInt(msg.data.timeSaved);
+        browser = msg.target;
+        this.state.totalTimeSaved += counter;
+        this.state.timeSaved.set(browser, counter);
+        this.showPageAction(browser.getRootNode(), counter);
+        this.setPageActionCounter(browser.getRootNode(), counter);
         break;
       default:
         throw new Error(`Message type not recognized, ${ msg.data.action }`);

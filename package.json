@@ -10,7 +10,7 @@
     "minVersion": "57.0",
     "maxVersion": "*",
     "multiprocessCompatible": true,
-    "hasEmbeddedWebExtension": true,
+    "hasEmbeddedWebExtension": false,
     "chromeResource": "tracking-protection-messaging",
     "creator": "Bianca Danforth <bdanforth@mozilla.com>",
     "description": "Tracking Protection Messaging Shield Study",
