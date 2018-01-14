@@ -52,9 +52,6 @@ const EXPORTED_SYMBOLS = ["Feature"];
 
 const XUL_NS = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
 
-// TODO bdanforth: disable built-in tracking protection
-// const TRACKING_PROTECTION_PREF = "privacy.trackingprotection.enabled";
-// const TRACKING_PROTECTION_UI_PREF = "privacy.trackingprotection.ui.enabled";
 const DOORHANGER_ID = "onboarding-trackingprotection-notification";
 const DOORHANGER_ICON = "chrome://browser/skin/tracking-protection-16.svg#enabled";
 const STYLESHEET_URL = `resource://${BASE}/skin/tracking-protection-study.css`;
@@ -71,11 +68,18 @@ class Feature {
     this.variation = variation;
     this.studyUtils = studyUtils;
     this.reasonName = reasonName;
+    // TODO bdanforth: disable built-in tracking protection (See Issue #18)
+    // const TRACKING_PROTECTION_UI_PREF = "privacy.trackingprotection.ui.enabled";
+    this.PREF_TP_ENABLED_GLOBALLY = "privacy.trackingprotection.enabled";
+    this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS = "privacy.trackingprotection.pbmode.enabled";
     this.addContentMessageListeners();
     this.init(variation.name);
   }
 
   async init(treatment) {
+    // if user toggles built-in TP on/off, end the study
+    this.addBuiltInTrackingProtectionListeners();
+
     // TODO bdanforth: get treatment(s) from bootstrap/studyUtils
     // define treatments as STRING: fn(browserWindow, url)
     this.TREATMENTS = {
@@ -171,6 +175,21 @@ class Feature {
     // Depending on which event happens (ex: onOpenWindow, onLocationChange),
     // it will call that listener method that exists on "this"
     Services.wm.addListener(this);
+  }
+
+  addBuiltInTrackingProtectionListeners() {
+    Services.prefs.addObserver(this.PREF_TP_ENABLED_GLOBALLY, this);
+    Services.prefs.addObserver(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, this);
+  }
+
+  observe(subject, topic, data) {
+    switch (topic) {
+      case "nsPref:changed":
+        if (data === this.PREF_TP_ENABLED_GLOBALLY || this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS) {
+          console.log("User toggled tracking protection on/off.");
+        }
+        break;
+    }
   }
 
   /**
@@ -540,6 +559,13 @@ class Feature {
 
     Cu.unload("resource://tracking-protection-study/Canonicalize.jsm");
     Cu.unload("resource://tracking-protection-study/BlockLists.jsm");
+
+    this.removeBuiltInTrackingProtectionListeners();
+  }
+
+  removeBuiltInTrackingProtectionListeners() {
+    Services.prefs.removeObserver(this.PREF_TP_ENABLED_GLOBALLY, this);
+    Services.prefs.removeObserver(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, this);
   }
 
   addContentMessageListeners() {
