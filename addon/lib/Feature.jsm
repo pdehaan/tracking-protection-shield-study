@@ -65,18 +65,20 @@ class Feature {
     *
     */
   constructor({variation, studyUtils, reasonName}) {
-    this.variation = variation;
+    this.treatment = variation.name;
     this.studyUtils = studyUtils;
     this.reasonName = reasonName;
-    // TODO bdanforth: disable built-in tracking protection (See Issue #18)
+    // TODO bdanforth: initialize built-in TP correctly by branch (See Issue #18)
     // const TRACKING_PROTECTION_UI_PREF = "privacy.trackingprotection.ui.enabled";
+    this.TP_ENABLED_GLOBALLY = (this.treatment === "pseudo-control");
+    this.TP_ENABLED_IN_PRIVATE_WINDOWS = (this.treatment === "control");
     this.PREF_TP_ENABLED_GLOBALLY = "privacy.trackingprotection.enabled";
     this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS = "privacy.trackingprotection.pbmode.enabled";
     this.addContentMessageListeners();
-    this.init(variation.name);
+    this.init();
   }
 
-  async init(treatment) {
+  async init() {
     // if user toggles built-in TP on/off, end the study
     this.addBuiltInTrackingProtectionListeners();
 
@@ -87,7 +89,6 @@ class Feature {
       private: this.showIntroPanel.bind(this),
     };
 
-    this.treatment = treatment;
     // TODO bdanforth: update newtab messages copy
     const newtab_messages = {
       fast: "Firefox blocked ${blockedRequests} trackers today<br/> and saved you ${minutes} minutes",
@@ -182,14 +183,51 @@ class Feature {
     Services.prefs.addObserver(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, this);
   }
 
-  observe(subject, topic, data) {
+  async observe(subject, topic, data) {
+    let reason;
     switch (topic) {
       case "nsPref:changed":
         if (data === this.PREF_TP_ENABLED_GLOBALLY || this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS) {
-          console.log("User toggled tracking protection on/off.");
+          const prevState = this.getPreviousTrackingProtectionState();
+          const nextState = this.getNextTrackingProtectionState();
+          console.log(prevState, nextState);
+          // Rankings - TP ON globally: 3, TP ON private windows only: 2, TP OFF globally: 1
+          reason = (nextState > prevState) ? "ended-positive" : "ended-negative";
+          console.log(`Ending study, treatment: ${ this.treatment }, reason: ${ reason }`);
+          await this.studyUtils.endStudy({ reason });
         }
         break;
     }
+  }
+
+  getPreviousTrackingProtectionState() {
+    // Built-in TP has three possible states:
+    //   1) OFF globally, 2) ON for private windows only, 3) ON globally
+    let prevState;
+    if (this.TP_ENABLED_GLOBALLY) {
+      prevState = 3;
+    } else if (this.TP_ENABLED_IN_PRIVATE_WINDOWS) {
+      prevState = 2;
+    } else {
+      prevState = 1;
+    }
+    return prevState;
+  }
+
+  getNextTrackingProtectionState() {
+    // Built-in TP has three possible states:
+    //   1) OFF globally, 2) ON for private windows only, 3) ON globally
+    let nextState;
+    const enabledGlobally = Services.prefs.getBoolPref(this.PREF_TP_ENABLED_GLOBALLY);
+    const enabledInPrivateWindows = Services.prefs.getBoolPref(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS);
+    if (enabledGlobally) {
+      nextState = 3;
+    } else if (enabledInPrivateWindows) {
+      nextState = 2;
+    } else {
+      nextState = 1;
+    }
+    return nextState;
   }
 
   /**

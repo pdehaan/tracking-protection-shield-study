@@ -94,12 +94,18 @@ var config = {
   /* Study branches and sample weights */
   // TODO bdanforth: Finalize branches and weights
   "weightedVariations": [
+    // Built-in TP ON in Private Windows only, no study UI
+    {"name": "control",
+      "weight": 1},
+    // Built-in TP ON globally, no study UI
+    {"name": "pseudo-control",
+      "weight": 1},
+    // Built-in TP OFF globally, re-implemented ON globally in study, study UI shows "fast" messaging
     {"name": "fast",
-      "weight": 1.5},
-    // {"name": "private",
-    //   "weight": 1.5},
-    // {"name": "control",
-    //   "weight": 1},
+      "weight": 1},
+    // Built-in TP OFF globally, re-implemented ON globally in study, study UI shows "private etc." messaging
+    {"name": "private",
+      "weight": 1},
   ],
 
 
