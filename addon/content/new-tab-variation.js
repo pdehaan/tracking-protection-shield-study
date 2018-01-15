@@ -26,7 +26,7 @@ class TrackingProtectionStudy {
         if (doc.readyState === "complete") {
           this.addContentToNewTab(msg.data.state, doc);
         } else {
-          doc.addEventListener("DOMContentLoaded", () => this.addMessageToNewTab(msg.data.state, doc));
+          doc.addEventListener("DOMContentLoaded", () => this.addContentToNewTab(msg.data.state, doc));
         }
         break;
       case "updateTPNumbers":

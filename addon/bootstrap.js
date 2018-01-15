@@ -23,9 +23,6 @@ this.Bootstrap = {
   EXPIRATION_DATE_STRING_PREF:
     "extensions.tracking_protection_messaging_study.expiration_date_string",
   STUDY_DURATION_WEEKS: 2,
-  // Randomize frame script URL due to bug 1051238.
-  FRAME_SCRIPT_URL:
-    `resource://${STUDY}/content/new-tab-variation.js?${Math.random()}`,
 
   async startup(addonData, reason) {
 
@@ -97,7 +94,8 @@ this.Bootstrap = {
     const variation = this.getVariationFromPref(config.weightedVariations) ||
       await studyUtils.deterministicVariation(config.weightedVariations);
     studyUtils.setVariation(variation);
-    this.log.debug(`studyUtils has config and variation.name: ${variation.name}.  Ready to send telemetry`);
+    this.log.debug(`studyUtils has config and variation.name: ${variation.name}.
+      Ready to send telemetry`);
     return variation;
   },
 
@@ -108,7 +106,8 @@ this.Bootstrap = {
     if (name !== "") {
       const variation = weightedVariations.filter(x => x.name === name)[0];
       if (!variation) {
-        throw new Error(`about:config => shield.test.variation set to ${name}, but not variation with that name exists`);
+        throw new Error(`about:config => shield.test.variation set to ${name},
+          but no variation with that name exists`);
       }
       return variation;
     }
@@ -136,10 +135,14 @@ this.Bootstrap = {
   initStudyDuration() {
     if (!Preferences.has(this.EXPIRATION_DATE_STRING_PREF)) {
       const now = Date.now();
-      // ms = weeks * 7 days/week * 24 hours/day * 60 minutes/hour * 60 seconds/minute * 1000 milliseconds/second
-      const studyDurationInMs = this.STUDY_DURATION_WEEKS * 7 * 24 * 60 * 60 * 1000;
+      // ms = weeks * 7 days/week * 24 hours/day * 60 minutes/hour
+      // * 60 seconds/minute * 1000 milliseconds/second
+      const studyDurationInMs =
+        this.STUDY_DURATION_WEEKS * 7 * 24 * 60 * 60 * 1000;
       const expirationDateInt = now + studyDurationInMs;
-      Preferences.set(this.EXPIRATION_DATE_STRING_PREF, new Date(expirationDateInt).toISOString());
+      Preferences.set(
+        this.EXPIRATION_DATE_STRING_PREF,
+        new Date(expirationDateInt).toISOString());
     }
   },
 
@@ -160,9 +163,13 @@ this.Bootstrap = {
   },
 
   addFeature(variation, reason) {
-    Services.mm.loadFrameScript(this.FRAME_SCRIPT_URL, true);
     // Start up your feature, with specific variation info.
-    this.feature = new Feature({variation, studyUtils, reasonName: this.REASONS[reason]});
+    this.feature = new Feature({
+      variation,
+      studyUtils,
+      reasonName: this.REASONS[reason],
+      logLevel: config.log.bootstrap.level,
+    });
   },
 
   /**
@@ -178,12 +185,10 @@ this.Bootstrap = {
       // Send this before the ShuttingDown event to ensure that message handlers
       // are still registered and receive it.
       Services.mm.broadcastAsyncMessage("TPStudy:Uninstalling");
-      // TODO bdanforth: process this message on the other end, see pioneer-enrollment-study
+      // TODO bdanforth: process this message on the other end,
+      // see pioneer-enrollment-study
     }
 
-    // ensure the frame script is not loaded into any new tabs
-    Services.mm.removeDelayedFrameScript(this.FRAME_SCRIPT_URL);
-    // TODO bdanforth: disable frame scripts already loaded (Issue #39)
     Services.mm.broadcastAsyncMessage("TPStudy:ShuttingDown");
     // TODO bdanforth: process this message on the other end.
 
@@ -195,7 +200,7 @@ this.Bootstrap = {
       // TODO bdanforth: also remove treatment override pref (Issue #37)
 
       // passing through Feature.jsm to also reset TP to default setting
-      // TODO/QUESTION bdanforth: Do we need to feature.uninit() and Cu.unload here too?
+      // TODO/QUESTION: Do we need to feature.uninit() & Cu.unload here too?
       // In general, am I shutting everything down properly (ex: clearUserPref)
       await this.feature.endStudy("user-disable");
     }
