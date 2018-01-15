@@ -68,7 +68,7 @@ class Feature {
     this.treatment = variation.name;
     this.studyUtils = studyUtils;
     this.reasonName = reasonName;
-    // const TRACKING_PROTECTION_UI_PREF = "privacy.trackingprotection.ui.enabled";
+    this.PREF_TP_UI_ENABLED = "privacy.trackingprotection.ui.enabled";
     this.TP_ENABLED_GLOBALLY = (this.treatment === "pseudo-control");
     this.TP_ENABLED_IN_PRIVATE_WINDOWS = (this.treatment === "control");
     this.PREF_TP_ENABLED_GLOBALLY = "privacy.trackingprotection.enabled";
@@ -78,6 +78,8 @@ class Feature {
   }
 
   async init() {
+
+    this.disableBuiltInTrackingProtectionUI();
 
     // initialize built-in tracking protection state correctly by branch
     this.initBuiltInTrackingProtection();
@@ -179,6 +181,10 @@ class Feature {
     // Depending on which event happens (ex: onOpenWindow, onLocationChange),
     // it will call that listener method that exists on "this"
     Services.wm.addListener(this);
+  }
+
+  disableBuiltInTrackingProtectionUI() {
+    Services.prefs.setBoolPref(this.PREF_TP_UI_ENABLED, false);
   }
 
   initBuiltInTrackingProtection() {
@@ -624,6 +630,12 @@ class Feature {
     Cu.unload("resource://tracking-protection-study/BlockLists.jsm");
 
     this.removeBuiltInTrackingProtectionListeners();
+
+    this.reenableBuiltInTrackingProtectionUI();
+  }
+
+  reenableBuiltInTrackingProtectionUI() {
+    Services.prefs.setBoolPref(this.PREF_TP_UI_ENABLED, true);
   }
 
   resetBuiltInTrackingProtection() {
