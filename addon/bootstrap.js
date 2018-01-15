@@ -92,14 +92,16 @@ this.Bootstrap = {
       if (!studyUtils._isEnding) {
         // we are the first 'uninstall' requestor => must be user action.
         log.debug("probably: user requested shutdown");
-        studyUtils.endStudy({reason: "user-disable"});
+        // passing through Feature.jsm to also reset TP to default setting
+        // TODO bdanforth: Do we need to feature.uninit() and Cu.unload here too?
+        this.feature.endStudy("user-disable");
         return;
       }
       // normal shutdown, or 2nd uninstall request
 
       // QA NOTE:  unload addon specific modules here.
+      this.feature.uninit();
       Cu.unload(`resource://${BASE}/lib/Feature.jsm`);
-      this.feature.shutdown();
 
       // clean up our modules.
       Cu.unload(CONFIGPATH);

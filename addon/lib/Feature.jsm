@@ -52,9 +52,6 @@ const EXPORTED_SYMBOLS = ["Feature"];
 
 const XUL_NS = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
 
-// TODO bdanforth: disable built-in tracking protection
-// const TRACKING_PROTECTION_PREF = "privacy.trackingprotection.enabled";
-// const TRACKING_PROTECTION_UI_PREF = "privacy.trackingprotection.ui.enabled";
 const DOORHANGER_ID = "onboarding-trackingprotection-notification";
 const DOORHANGER_ICON = "chrome://browser/skin/tracking-protection-16.svg#enabled";
 const STYLESHEET_URL = `resource://${BASE}/skin/tracking-protection-study.css`;
@@ -68,14 +65,28 @@ class Feature {
     *
     */
   constructor({variation, studyUtils, reasonName}) {
-    this.variation = variation;
+    this.treatment = variation.name;
     this.studyUtils = studyUtils;
     this.reasonName = reasonName;
+    this.PREF_TP_UI_ENABLED = "privacy.trackingprotection.ui.enabled";
+    this.TP_ENABLED_GLOBALLY = (this.treatment === "pseudo-control");
+    this.TP_ENABLED_IN_PRIVATE_WINDOWS = (this.treatment === "control");
+    this.PREF_TP_ENABLED_GLOBALLY = "privacy.trackingprotection.enabled";
+    this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS = "privacy.trackingprotection.pbmode.enabled";
     this.addContentMessageListeners();
-    this.init(variation.name);
+    this.init();
   }
 
-  async init(treatment) {
+  async init() {
+
+    this.disableBuiltInTrackingProtectionUI();
+
+    // initialize built-in tracking protection state correctly by branch
+    this.initBuiltInTrackingProtection();
+
+    // if user toggles built-in TP on/off, end the study
+    this.addBuiltInTrackingProtectionListeners();
+
     // TODO bdanforth: get treatment(s) from bootstrap/studyUtils
     // define treatments as STRING: fn(browserWindow, url)
     this.TREATMENTS = {
@@ -83,7 +94,6 @@ class Feature {
       private: this.showIntroPanel.bind(this),
     };
 
-    this.treatment = treatment;
     // TODO bdanforth: update newtab messages copy
     const newtab_messages = {
       fast: "Firefox blocked ${blockedRequests} trackers today<br/> and saved you ${minutes} minutes",
@@ -171,6 +181,77 @@ class Feature {
     // Depending on which event happens (ex: onOpenWindow, onLocationChange),
     // it will call that listener method that exists on "this"
     Services.wm.addListener(this);
+  }
+
+  disableBuiltInTrackingProtectionUI() {
+    Services.prefs.setBoolPref(this.PREF_TP_UI_ENABLED, false);
+  }
+
+  initBuiltInTrackingProtection() {
+    switch (this.treatment) {
+      case "control":
+        // make no change to default setting
+        break;
+      case "pseudo-control":
+        Services.prefs.setBoolPref(this.PREF_TP_ENABLED_GLOBALLY, true);
+        break;
+      case "fast":
+      case "private":
+        Services.prefs.setBoolPref(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, false);
+        break;
+    }
+  }
+
+  addBuiltInTrackingProtectionListeners() {
+    Services.prefs.addObserver(this.PREF_TP_ENABLED_GLOBALLY, this);
+    Services.prefs.addObserver(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, this);
+  }
+
+  async observe(subject, topic, data) {
+    let reason;
+    switch (topic) {
+      case "nsPref:changed":
+        if (data === this.PREF_TP_ENABLED_GLOBALLY || this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS) {
+          const prevState = this.getPreviousTrackingProtectionState();
+          const nextState = this.getNextTrackingProtectionState();
+          console.log(prevState, nextState);
+          // Rankings - TP ON globally: 3, TP ON private windows only: 2, TP OFF globally: 1
+          reason = (nextState > prevState) ? "ended-positive" : "ended-negative";
+          console.log(`Ending study, treatment: ${ this.treatment }, reason: ${ reason }`);
+          await this.endStudy(reason, false);
+        }
+        break;
+    }
+  }
+
+  getPreviousTrackingProtectionState() {
+    // Built-in TP has three possible states:
+    //   1) OFF globally, 2) ON for private windows only, 3) ON globally
+    let prevState;
+    if (this.TP_ENABLED_GLOBALLY) {
+      prevState = 3;
+    } else if (this.TP_ENABLED_IN_PRIVATE_WINDOWS) {
+      prevState = 2;
+    } else {
+      prevState = 1;
+    }
+    return prevState;
+  }
+
+  getNextTrackingProtectionState() {
+    // Built-in TP has three possible states:
+    //   1) OFF globally, 2) ON for private windows only, 3) ON globally
+    let nextState;
+    const enabledGlobally = Services.prefs.getBoolPref(this.PREF_TP_ENABLED_GLOBALLY);
+    const enabledInPrivateWindows = Services.prefs.getBoolPref(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS);
+    if (enabledGlobally) {
+      nextState = 3;
+    } else if (enabledInPrivateWindows) {
+      nextState = 2;
+    } else {
+      nextState = 1;
+    }
+    return nextState;
   }
 
   /**
@@ -513,6 +594,13 @@ class Feature {
     }
   }
 
+  async endStudy(reason, shouldResetTP = true) {
+    if (shouldResetTP) {
+      this.resetBuiltInTrackingProtection();
+    }
+    await this.studyUtils.endStudy({ reason });
+  }
+
   uninit() {
     // Remove listeners from all open windows.
     const enumerator = Services.wm.getEnumerator("navigator:browser");
@@ -540,6 +628,23 @@ class Feature {
 
     Cu.unload("resource://tracking-protection-study/Canonicalize.jsm");
     Cu.unload("resource://tracking-protection-study/BlockLists.jsm");
+
+    this.removeBuiltInTrackingProtectionListeners();
+
+    this.reenableBuiltInTrackingProtectionUI();
+  }
+
+  reenableBuiltInTrackingProtectionUI() {
+    Services.prefs.setBoolPref(this.PREF_TP_UI_ENABLED, true);
+  }
+
+  resetBuiltInTrackingProtection() {
+    Services.prefs.setBoolPref(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, true);
+  }
+
+  removeBuiltInTrackingProtectionListeners() {
+    Services.prefs.removeObserver(this.PREF_TP_ENABLED_GLOBALLY, this);
+    Services.prefs.removeObserver(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, this);
   }
 
   addContentMessageListeners() {
