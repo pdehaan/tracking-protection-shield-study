@@ -92,7 +92,8 @@ this.Bootstrap = {
       if (!studyUtils._isEnding) {
         // we are the first 'uninstall' requestor => must be user action.
         log.debug("probably: user requested shutdown");
-        studyUtils.endStudy({reason: "user-disable"});
+        // passing through Feature.jsm to also reset TP to default setting
+        this.feature.endStudy("user-disable");
         return;
       }
       // normal shutdown, or 2nd uninstall request

@@ -68,7 +68,6 @@ class Feature {
     this.treatment = variation.name;
     this.studyUtils = studyUtils;
     this.reasonName = reasonName;
-    // TODO bdanforth: initialize built-in TP correctly by branch (See Issue #18)
     // const TRACKING_PROTECTION_UI_PREF = "privacy.trackingprotection.ui.enabled";
     this.TP_ENABLED_GLOBALLY = (this.treatment === "pseudo-control");
     this.TP_ENABLED_IN_PRIVATE_WINDOWS = (this.treatment === "control");
@@ -79,6 +78,10 @@ class Feature {
   }
 
   async init() {
+
+    // initialize built-in tracking protection state correctly by branch
+    this.initBuiltInTrackingProtection();
+
     // if user toggles built-in TP on/off, end the study
     this.addBuiltInTrackingProtectionListeners();
 
@@ -178,6 +181,21 @@ class Feature {
     Services.wm.addListener(this);
   }
 
+  initBuiltInTrackingProtection() {
+    switch (this.treatment) {
+      case "control":
+        // make no change to default setting
+        break;
+      case "pseudo-control":
+        Services.prefs.setBoolPref(this.PREF_TP_ENABLED_GLOBALLY, true);
+        break;
+      case "fast":
+      case "private":
+        Services.prefs.setBoolPref(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, false);
+        break;
+    }
+  }
+
   addBuiltInTrackingProtectionListeners() {
     Services.prefs.addObserver(this.PREF_TP_ENABLED_GLOBALLY, this);
     Services.prefs.addObserver(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, this);
@@ -194,7 +212,7 @@ class Feature {
           // Rankings - TP ON globally: 3, TP ON private windows only: 2, TP OFF globally: 1
           reason = (nextState > prevState) ? "ended-positive" : "ended-negative";
           console.log(`Ending study, treatment: ${ this.treatment }, reason: ${ reason }`);
-          await this.studyUtils.endStudy({ reason });
+          await this.endStudy(reason, false);
         }
         break;
     }
@@ -570,6 +588,13 @@ class Feature {
     }
   }
 
+  async endStudy(reason, shouldResetTP = true) {
+    if (shouldResetTP) {
+      this.resetBuiltInTrackingProtection();
+    }
+    await this.studyUtils.endStudy({ reason });
+  }
+
   uninit() {
     // Remove listeners from all open windows.
     const enumerator = Services.wm.getEnumerator("navigator:browser");
@@ -599,6 +624,10 @@ class Feature {
     Cu.unload("resource://tracking-protection-study/BlockLists.jsm");
 
     this.removeBuiltInTrackingProtectionListeners();
+  }
+
+  resetBuiltInTrackingProtection() {
+    Services.prefs.setBoolPref(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, true);
   }
 
   removeBuiltInTrackingProtectionListeners() {
