@@ -7,6 +7,8 @@ const { classes: Cc, interfaces: Ci, utils: Cu } = Components;
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 XPCOMUtils.defineLazyModuleGetter(this, "Services",
   "resource://gre/modules/Services.jsm");
+XPCOMUtils.defineLazyModuleGetter(this, "Preferences",
+  "resource://gre/modules/Preferences.jsm");
 
 // Create a new instance of the ConsoleAPI so we can control the maxLogLevel with Config.jsm.
 XPCOMUtils.defineLazyGetter(this, "log", () => {
@@ -26,6 +28,8 @@ const { studyUtils } = Cu.import(STUDYUTILSPATH, {});
 
 const REASONS = studyUtils.REASONS;
 const UI_AVAILABLE_NOTIFICATION = "browser-delayed-startup-finished";
+const EXPIRATION_DATE_STRING_PREF = "extensions.tracking_protection_messaging_study.expiration_date_string";
+const STUDY_DURATION_WEEKS = 2;
 
 // Study-specific modules
 const BASE = "tracking-protection-messaging";
@@ -33,7 +37,6 @@ XPCOMUtils.defineLazyModuleGetter(this, "Feature", `resource://${BASE}/lib/Featu
 
 this.Bootstrap = {
   async startup(addonData, reason) {
-    // TODO bdanforth: Turn off TP always just in case before applying treatments
 
     // Randomize frame script URL due to bug 1051238. TODO bdanforth add ?${Math.random()}
     this.FRAME_SCRIPT_URL = `resource://${BASE}/content/new-tab-variation.js`;
@@ -56,6 +59,21 @@ this.Bootstrap = {
     */
     await studyUtils.startup({reason});
 
+    // Set up study duration
+    if (!Preferences.has(EXPIRATION_DATE_STRING_PREF)) {
+      const now = Date.now();
+      // ms = weeks * 7 days/week * 24 hours/day * 60 minutes/hour * 60 seconds/minute * 1000 milliseconds/second
+      const studyDurationInMs = STUDY_DURATION_WEEKS * 7 * 24 * 60 * 60 * 1000;
+      const expirationDateInt = now + studyDurationInMs;
+      Preferences.set(EXPIRATION_DATE_STRING_PREF, new Date(expirationDateInt).toISOString());
+    }
+
+    // Check for study expiry
+    const expirationDateInt = Date.parse(Preferences.get(EXPIRATION_DATE_STRING_PREF));
+    if (Date.now() > expirationDateInt) {
+      studyUtils.endStudy({ reason: "expired" });
+    }
+
     // log what the study variation and other info is.
     log.debug(`info ${JSON.stringify(studyUtils.info())}`);
 
@@ -74,6 +92,8 @@ this.Bootstrap = {
   * studyUtils._isEnding means this is a '2nd shutdown'.
   */
   shutdown(addonData, reason) {
+    // QUESTION/TODO: Sort out what is happening in shutdown and when things should be called.
+
     log.debug("shutdown", REASONS[reason] || reason);
     // FRAGILE: handle uninstalls initiated by USER or by addon
     if (reason === REASONS.ADDON_UNINSTALL || reason === REASONS.ADDON_DISABLE) {
@@ -92,6 +112,10 @@ this.Bootstrap = {
       if (!studyUtils._isEnding) {
         // we are the first 'uninstall' requestor => must be user action.
         log.debug("probably: user requested shutdown");
+
+        // remove custom pref for study duration
+        Services.prefs.clearUserPref(EXPIRATION_DATE_STRING_PREF);
+
         // passing through Feature.jsm to also reset TP to default setting
         // TODO bdanforth: Do we need to feature.uninit() and Cu.unload here too?
         this.feature.endStudy("user-disable");
