@@ -6,12 +6,12 @@
 
 module.exports = {
   "parserOptions": {
-      "ecmaVersion": 8,
-      "sourceType": "module",
-      "ecmaFeatures": {
-          "jsx": false,
-          "experimentalObjectRestSpread": true
-      }
+    "ecmaVersion": 8,
+    "sourceType": "module",
+    "ecmaFeatures": {
+      "jsx": false,
+      "experimentalObjectRestSpread": true
+    }
   },
   env: {
     'es6': true,
@@ -36,11 +36,12 @@ module.exports = {
     "comma-dangle": ["error", "always-multiline"],
     "eqeqeq": "error",
     "indent": ["warn", 2, {SwitchCase: 1}],
+    "mozilla/balanced-listeners": "off",
     "mozilla/no-aArgs": "warn",
-    "mozilla/balanced-listeners": 0,
     "no-console": "warn",
     "no-shadow": ["error"],
     "no-unused-vars": "error",
+    "no-warning-comments": "off", // TODO: warn
     "prefer-const": "warn",
     "prefer-spread": "error",
     "semi": ["error", "always"],
