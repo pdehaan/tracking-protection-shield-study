@@ -20,6 +20,8 @@ XPCOMUtils.defineLazyModuleGetter(this, "Feature",
 this.Bootstrap = {
 
   UI_AVAILABLE_NOTIFICATION: "browser-delayed-startup-finished",
+  VARIATION_OVERRIDE_PREF:
+    "extensions.tracking_protection_messaging_study.variation_override",
   EXPIRATION_DATE_STRING_PREF:
     "extensions.tracking_protection_messaging_study.expiration_date_string",
   STUDY_DURATION_WEEKS: 2,
@@ -101,17 +103,16 @@ this.Bootstrap = {
 
   // helper to let Dev or QA set the variation name
   getVariationFromPref(weightedVariations) {
-    const key = "shield.test.variation";
-    const name = Services.prefs.getCharPref(key, "");
+    const name = Services.prefs.getCharPref(this.VARIATION_OVERRIDE_PREF, "");
     if (name !== "") {
       const variation = weightedVariations.filter(x => x.name === name)[0];
       if (!variation) {
-        throw new Error(`about:config => shield.test.variation set to ${name},
-          but no variation with that name exists`);
+        throw new Error(`about:config => ${this.VARIATION_OVERRIDE_PREF} set to ${name},
+          but no variation with that name exists.`);
       }
       return variation;
     }
-    return name; // undefined
+    return name;
   },
 
   /**
