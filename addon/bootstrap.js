@@ -156,6 +156,7 @@ this.Bootstrap = {
     return false;
   },
 
+  // eslint-disable-next-line no-unused-vars
   observe(subject, topic, data) {
     if (topic === this.UI_AVAILABLE_NOTIFICATION) {
       Services.obs.removeObserver(this, this.UI_AVAILABLE_NOTIFICATION);

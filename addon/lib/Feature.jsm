@@ -106,7 +106,7 @@ class Feature {
     };
 
     // run once now on the most recent window.
-    let win = Services.wm.getMostRecentWindow("navigator:browser");
+    const win = Services.wm.getMostRecentWindow("navigator:browser");
 
     this.state = {
       totalTimeSaved: 0,

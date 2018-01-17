@@ -224,6 +224,7 @@ class getChromeElementBy {
         By[method](selector)), 1000);
     } catch (e) {
       // if there an error, the button was not found
+      // eslint-disable-next-line no-console
       console.error(e);
       return null;
     }
