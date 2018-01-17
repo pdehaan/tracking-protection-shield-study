@@ -32,6 +32,7 @@ const FIREFOX_PREFERENCES = {
 
   // NECESSARY for all 57+ builds
   "extensions.legacy.enabled": true,
+  "xpinstall.signatures.required": false,
 
   // Temporarily installed addons can break due to sandbox, see Bug #1423687
   "security.sandbox.content.level": 2,
