@@ -22,6 +22,8 @@ this.Bootstrap = {
   UI_AVAILABLE_NOTIFICATION: "browser-delayed-startup-finished",
   VARIATION_OVERRIDE_PREF:
     "extensions.tracking_protection_messaging_study.variation_override",
+  DURATION_OVERRIDE_PREF:
+    "extensions.tracking_protection_messaging_study.duration_override",
   EXPIRATION_DATE_STRING_PREF:
     "extensions.tracking_protection_messaging_study.expiration_date_string",
   STUDY_DURATION_WEEKS: 2,
@@ -139,12 +141,18 @@ this.Bootstrap = {
       // ms = weeks * 7 days/week * 24 hours/day * 60 minutes/hour
       // * 60 seconds/minute * 1000 milliseconds/second
       const studyDurationInMs =
-        this.STUDY_DURATION_WEEKS * 7 * 24 * 60 * 60 * 1000;
+        this.getDurationFromPref()
+        || (this.STUDY_DURATION_WEEKS * 7 * 24 * 60 * 60 * 1000);
       const expirationDateInt = now + studyDurationInMs;
       Preferences.set(
         this.EXPIRATION_DATE_STRING_PREF,
         new Date(expirationDateInt).toISOString());
     }
+  },
+
+  // helper to let Dev or QA set the study duration
+  getDurationFromPref() {
+    return Services.prefs.getIntPref(this.DURATION_OVERRIDE_PREF, "");
   },
 
   isStudyExpired() {
