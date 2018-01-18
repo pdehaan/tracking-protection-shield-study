@@ -56,6 +56,7 @@ class Feature {
     this.treatment = variation.name;
     this.studyUtils = studyUtils;
     this.reasonName = reasonName;
+    this.IsStudyEnding = false;
     // Randomize frame script URL due to bug 1051238.
     this.FRAME_SCRIPT_URL =
     `resource://${STUDY}/content/new-tab-variation.js?${Math.random()}`,
@@ -206,6 +207,9 @@ class Feature {
     let reason;
     switch (topic) {
       case "nsPref:changed":
+        if (this.isStudyEnding) {
+          break;
+        }
         if (data === this.PREF_TP_ENABLED_GLOBALLY
           || this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS) {
           const prevState = this.getPreviousTrackingProtectionState();
@@ -670,6 +674,7 @@ class Feature {
   }
 
   async endStudy(reason, shouldResetTP = true) {
+    this.isStudyEnding = true;
     if (shouldResetTP) {
       this.resetBuiltInTrackingProtection();
     }
