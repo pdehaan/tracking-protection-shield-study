@@ -90,18 +90,18 @@ class Feature {
     };
 
     // TODO bdanforth: update newtab messages copy
-    const newTabMessages = {
+    this.newTabMessages = {
       fast: "Firefox blocked ${blockedRequests} trackers today<br/> and saved you ${minutes} minutes",
       private: "Firefox blocked ${blockedRequests} trackers today<br/> from ${blockedCompanies} companies that track your browsing",
     };
     // TODO bdanforth: update with final URLs
-    const learnMoreUrls = {
+    this.learnMoreUrls = {
       fast: "http://www.mozilla.com",
       private: "http://www.mozilla.com",
     };
 
     // TODO bdanforth: update intro panel message copy
-    const introPanelMessages = {
+    this.introPanelMessages = {
       fast: "Tracking protection is great! Would you like to participate in a study?",
       private: "Tracking protection is great! Would you like to participate in a study?",
     };
@@ -127,12 +127,7 @@ class Feature {
     };
 
     if (this.treatment in this.TREATMENTS) {
-      await this.TREATMENTS[this.treatment](
-        win,
-        introPanelMessages[this.treatment],
-        learnMoreUrls[this.treatment],
-        newTabMessages[this.treatment],
-      );
+      await this.TREATMENTS[this.treatment](win);
     }
 
     // if user toggles built-in TP on/off, end the study
@@ -170,8 +165,10 @@ class Feature {
         browser = msg.target;
         this.state.totalTimeSaved += counter;
         this.state.timeSaved.set(browser, counter);
-        this.showPageAction(browser.getRootNode(), counter);
-        this.setPageActionCounter(browser.getRootNode(), counter);
+        if (this.treatment === "fast") {
+          this.showPageAction(browser.getRootNode(), counter);
+          this.setPageActionCounter(browser.getRootNode(), counter);
+        }
         break;
       default:
         throw new Error(`Message type not recognized, ${ msg.data.action }`);
@@ -271,18 +268,17 @@ class Feature {
   }
 
   // "fast" and "private" treatments differ only in copy
-  async applyExperimentalTreatment(
-    win, introPanelMessage, learnMoreURL, newTabMessage) {
+  async applyExperimentalTreatment(win) {
     // 1. Initialize built-in Tracking Protection, OFF globally
     Services.prefs.setBoolPref(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, false);
 
     // 2. Show intro panel if addon was just installed
     if (this.reasonName === "ADDON_INSTALL") {
-      this.showIntroPanel(win, introPanelMessage, learnMoreURL);
+      this.shouldShowIntroPanel = true;
     }
 
     // 3. Add new tab variation
-    this.state.newTabMessage = newTabMessage;
+    this.state.newTabMessage = this.newTabMessages[this.treatment];
     Services.mm.loadFrameScript(this.FRAME_SCRIPT_URL, true);
 
     // 4. Add pageAction icon and pageAction panel; this is the complicated part
@@ -323,35 +319,36 @@ class Feature {
   * @param {String} url
   */
   showIntroPanel(win, message, url) {
+    const doc = win.document;
+    const button = doc.getElementById("tracking-protection-study-button");
 
-    const options = {
-      popupIconURL: this.DOORHANGER_ICON,
-      learnMoreURL: url,
-      persistent: true,
-      persistWhileVisible: true,
-    };
+    const introPanel = doc.createElementNS(this.XUL_NS, "panel");
+    introPanel.setAttribute("id", "tracking-protection-study-intro-panel");
+    introPanel.setAttribute("type", "arrow");
+    introPanel.setAttribute("level", "parent");
+    const introPanelBox = doc.createElementNS(this.XUL_NS, "vbox");
 
-    const action = {
-      label: "Got it!",
-      accessKey: "G",
-      callback: () => {
-        this.log.debug(`You clicked the button.`);
-      },
-    };
+    const header = doc.createElementNS(this.XUL_NS, "label");
+    header.setAttribute(
+      "value",
+      `Bleepity bloopity`
+    );
 
-    // Note: With "npm run firefox", panel does not open correctly without a delay
-    // Without delay, the panel flashes briefly at the bottom of the screen.
-    win.setTimeout(() => {
-      win.PopupNotifications.show(
-        win.gBrowser.selectedBrowser,
-        this.DOORHANGER_ID,
-        message,
-        null,
-        action,
-        [],
-        options
-      );
-    }, 1000);
+    const body = doc.createElementNS(this.XUL_NS, "hbox");
+
+    const footer = doc.createElementNS(this.XUL_NS, "label");
+    footer.setAttribute("value", "Testy McTesterson");
+
+    introPanelBox.append(header);
+    introPanelBox.append(body);
+    introPanelBox.append(footer);
+
+    introPanel.append(introPanelBox);
+
+    button.append(introPanel);
+
+    introPanel.openPopup(button);
+
   }
 
   async reimplementTrackingProtection(win) {
@@ -423,13 +420,19 @@ class Feature {
     // ensure the location change event is occuring in the top frame (not an
     // iframe for example) and also that a different page is being loaded
     if (progress.isTopLevel && flags !== LOCATION_CHANGE_SAME_DOCUMENT) {
-      // if tracking protection has already blocked any resources for this tab,
-      // reset the counter on the pageAction
-      if (this.state.blockedResources.has(browser)) {
-        this.showPageAction(browser.getRootNode(), 0);
-        this.setPageActionCounter(browser.getRootNode(), 0);
-        this.state.blockedResources.set(browser, 0);
-        this.state.timeSaved.set(browser, 0);
+      this.showPageAction(browser.getRootNode(), 0);
+      this.setPageActionCounter(browser.getRootNode(), 0);
+      this.state.blockedResources.set(browser, 0);
+      this.state.timeSaved.set(browser, 0);
+      if (this.shouldShowIntroPanel
+        && (uri.scheme === "http" || uri.scheme === "https")) {
+        const win = Services.wm.getMostRecentWindow("navigator:browser");
+        this.showIntroPanel(
+          win,
+          this.introPanelMessages[this.treatment],
+          this.learnMoreUrls[this.treatment]
+        );
+        this.shouldShowIntroPanel = false;
       }
     }
   }
@@ -558,12 +561,9 @@ class Feature {
    * @param {number} counter - blocked count for the current page.
    */
   showPageAction(doc, counter) {
+
     const win = Services.wm.getMostRecentWindow("navigator:browser");
 
-    let button = doc.getElementById("tracking-protection-study-button");
-    if (button) {
-      button.parentElement.removeChild(button);
-    }
     doc.getElementById("tracking");
     const urlbar = doc.getElementById("page-action-buttons");
 
@@ -607,19 +607,22 @@ class Feature {
 
     panel.append(panelBox);
 
-    button = doc.createElementNS(this.XUL_NS, "toolbarbutton");
-    button.style.backgroundColor = "green";
-    button.setAttribute("id", "tracking-protection-study-button");
-    button.setAttribute(
-      "image",
-      "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled");
-    button.append(panel);
-    button.addEventListener("command", () => {
-      doc.getElementById("panel");
-      panel.openPopup(button);
-    });
+    let button = doc.getElementById("tracking-protection-study-button");
+    if (!button) {
+      button = doc.createElementNS(this.XUL_NS, "toolbarbutton");
+      button.style.backgroundColor = "green";
+      button.setAttribute("id", "tracking-protection-study-button");
+      button.setAttribute(
+        "image",
+        "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled");
+      button.append(panel);
+      button.addEventListener("command", () => {
+        doc.getElementById("panel");
+        panel.openPopup(button);
+      });
 
-    urlbar.append(button);
+      urlbar.append(button);
+    }
   }
 
   setPageActionCounter(doc, counter) {
@@ -648,11 +651,6 @@ class Feature {
   onTabChange(evt) {
     const win = evt.target.ownerGlobal;
     const currentURI = win.gBrowser.currentURI;
-    // Don't show the page action if page is not http or https
-    if (currentURI.scheme !== "http" && currentURI.scheme !== "https") {
-      this.hidePageAction(win.document);
-      return;
-    }
 
     const currentWin = Services.wm.getMostRecentWindow("navigator:browser");
 
@@ -660,16 +658,16 @@ class Feature {
     // the status of the pageAction, then reshow it if the new page has had any
     // resources blocked.
     if (win === currentWin) {
-      this.hidePageAction(win.document);
       // depending on the treatment branch, we want the count of timeSaved
       // ("fast") or blockedResources ("private")
-      const counter = this.treatment === "private" ?
+      let counter = this.treatment === "private" ?
         this.state.blockedResources.get(win.gBrowser.selectedBrowser) :
         this.state.timeSaved.get(win.gBrowser.selectedBrowser);
-      if (counter) {
-        this.showPageAction(win.document, counter);
-        this.setPageActionCounter(win.document, counter);
+      if (!counter) {
+        counter = 0;
       }
+      this.showPageAction(win.document, counter);
+      this.setPageActionCounter(win.document, counter);
     }
   }
 
