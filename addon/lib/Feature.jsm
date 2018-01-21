@@ -322,14 +322,30 @@ class Feature {
   * @param {String} url
   */
   showIntroPanel(win, message, url) {
+    this.introPanelChromeWindow = win;
     const doc = win.document;
     const button = doc.getElementById("tracking-protection-study-button");
+    let introPanelShownTime,
+      introPanelHiddenTime,
+      introPanelOpenTime;
 
     const introPanel = doc.createElementNS(this.XUL_NS, "panel");
     introPanel.setAttribute("id", "tracking-protection-study-intro-panel");
     introPanel.setAttribute("type", "arrow");
     introPanel.setAttribute("level", "parent");
     introPanel.setAttribute("noautohide", "true");
+    introPanel.addEventListener("popupshown", () => {
+      console.log("Intro panel shown.");
+      introPanelShownTime = Date.now();
+    });
+    introPanel.addEventListener("popuphidden", () => {
+      console.log("Intro panel hidden.");
+      introPanelHiddenTime = Date.now();
+      introPanelOpenTime =
+        (introPanelHiddenTime - introPanelShownTime) / 1000;
+      console.log(`Intro panel was open for ${Math.round(introPanelOpenTime)} seconds`);
+
+    });
     introPanel.style.position = "relative";
     const introPanelBox = doc.createElementNS(this.XUL_NS, "vbox");
     introPanelBox.style.width = "300px";
@@ -372,6 +388,7 @@ class Feature {
     introPanel.append(introPanelBox);
 
     button.append(introPanel);
+    this.introPanel = introPanel;
 
     this.state.introPanelIsShowing = true;
     introPanel.openPopup(button);
@@ -399,7 +416,7 @@ class Feature {
     yesButton.addEventListener("command", () => {
         console.log("You clicked the 'Yes' button on the intro panel's confirmation dialogue.");
         introPanel.hidePopup();
-        this.introPanelIsShowing = false;
+        this.state.introPanelIsShowing = false;
     });
     const yesButtonLabel = doc.createElementNS(this.XUL_NS, "label");
     yesButtonLabel.setAttribute("value", "Yes");
@@ -463,7 +480,7 @@ class Feature {
   /**
   * Three cases of user looking at diff page:
       - switched windows (onOpenWindow)
-      - loading new pages in the same tab (onPageLoad/Frame script)
+      - loading new pages in the same tab (on page load in frame script)
       - switching tabs but not switching windows (tabSelect)
     Each one needs its own separate handler, because each one is detected by its
     own separate event.
@@ -476,6 +493,17 @@ class Feature {
         "TabSelect",
         this.onTabChange.bind(this)
       );
+      // handle the case where the window closed, but intro or pageAction panel
+      // is still open.
+      win.addEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
+    }
+  }
+
+  handleWindowClosing(win) {
+    if (this.state.introPanelIsShowing && win === this.introPanelChromeWindow) {
+      this.introPanel.hidePopup();
+      this.state.introPanelIsShowing = false;
+      console.log("Intro panel has been dismissed by user closing its window.");
     }
   }
 
@@ -484,6 +512,8 @@ class Feature {
   // Adds event listeners to newly created windows (browser application window)
   // This method is NOT called when opening a new tab.
   onOpenWindow(xulWindow) {
+
+    // win is a chromeWindow
     var win = xulWindow.QueryInterface(Ci.nsIInterfaceRequestor)
       .getInterface(Ci.nsIDOMWindowInternal || Ci.nsIDOMWindow);
     win.addEventListener(
@@ -506,9 +536,18 @@ class Feature {
       this.setPageActionCounter(browser.getRootNode(), 0);
       this.state.blockedResources.set(browser, 0);
       this.state.timeSaved.set(browser, 0);
+      
+      // Hide intro panel on location change in the same tab if showing
+      if (this.state.introPanelIsShowing && this.introPanelBrowser === browser) {
+        this.introPanel.hidePopup();
+        this.state.introPanelIsShowing = false;
+        console.log("Intro panel has been dismissed by user from page change in same tab.");
+      }
+
       if (this.shouldShowIntroPanel
         && (uri.scheme === "http" || uri.scheme === "https")) {
         const win = Services.wm.getMostRecentWindow("navigator:browser");
+        this.introPanelBrowser = browser;
         this.showIntroPanel(
           win,
           this.introPanelMessages[this.treatment],
@@ -736,7 +775,15 @@ class Feature {
   * Only one icon in URL across all tabs, have to update it per page.
   */
   onTabChange(evt) {
+    // Hide intro panel on tab change if showing
+    if (this.state.introPanelIsShowing) {
+      this.introPanel.hidePopup();
+      this.state.introPanelIsShowing = false;
+      console.log("Intro panel has been dismissed by user from tab change.");
+    }
+
     const win = evt.target.ownerGlobal;
+    // TODO bdanforth: use currentURI to hide pageAction icon when not at an http or https site 
     const currentURI = win.gBrowser.currentURI;
 
     const currentWin = Services.wm.getMostRecentWindow("navigator:browser");
@@ -787,7 +834,8 @@ class Feature {
       WebRequest.onBeforeRequest.removeListener(this.onBeforeRequest);
       win.gBrowser.removeTabsProgressListener(this);
       win.gBrowser.tabContainer.removeEventListener("TabSelect", this.onTabChange);
-      win.removeEventListener("load", this.onPageLoad);
+
+      win.removeEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
 
       Services.wm.removeListener(this);
     }
