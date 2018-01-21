@@ -124,6 +124,9 @@ class Feature {
       totalBlockedCompanies: 0,
       blockedWebsites: new Set(),
       totalBlockedWebsites: 0,
+      // Checked by the pageAction panel's "command" event listener to make sure
+      // the pageAction panel never opens when the intro panel is currently open
+      introPanelIsShowing: false,
     };
 
     if (this.treatment in this.TREATMENTS) {
@@ -326,29 +329,108 @@ class Feature {
     introPanel.setAttribute("id", "tracking-protection-study-intro-panel");
     introPanel.setAttribute("type", "arrow");
     introPanel.setAttribute("level", "parent");
+    introPanel.setAttribute("noautohide", "true");
+    introPanel.style.position = "relative";
     const introPanelBox = doc.createElementNS(this.XUL_NS, "vbox");
+    introPanelBox.style.width = "300px";
+    const confirmationPanelBox = this.getConfirmationPanelBox(win, introPanelBox, introPanel);
 
     const header = doc.createElementNS(this.XUL_NS, "label");
     header.setAttribute(
       "value",
-      `Bleepity bloopity`
+      `Tracking Protection is awesome. Continue?`
     );
 
     const body = doc.createElementNS(this.XUL_NS, "hbox");
 
-    const footer = doc.createElementNS(this.XUL_NS, "label");
-    footer.setAttribute("value", "Testy McTesterson");
+    const yesButton = doc.createElementNS(this.XUL_NS, "button");
+    yesButton.addEventListener("command", () => {
+        console.log("You clicked the 'Yes' button on the intro panel.");
+        introPanel.hidePopup();
+        this.state.introPanelIsShowing = false;
+    });
+    const yesButtonLabel = doc.createElementNS(this.XUL_NS, "label");
+    yesButtonLabel.setAttribute("value", "Yes");
+    yesButton.append(yesButtonLabel);
+
+    const noButton = doc.createElementNS(this.XUL_NS, "button");
+    noButton.addEventListener("command", () => {
+      console.log("You clicked the 'No' button on the intro panel.");
+      this.toggleConfirmation(win, confirmationPanelBox, introPanelBox);
+    });
+    const noButtonLabel = doc.createElementNS(this.XUL_NS, "label");
+    noButtonLabel.setAttribute("value", "No");
+    noButton.append(noButtonLabel);
+
+    body.append(yesButton);
+    body.append(noButton);
 
     introPanelBox.append(header);
     introPanelBox.append(body);
-    introPanelBox.append(footer);
 
+    introPanel.append(confirmationPanelBox);
     introPanel.append(introPanelBox);
 
     button.append(introPanel);
 
+    this.state.introPanelIsShowing = true;
     introPanel.openPopup(button);
 
+  }
+
+  getConfirmationPanelBox(win, introPanelBox, introPanel) {
+    const doc = win.document;
+    const confirmationPanelBox = doc.createElementNS(this.XUL_NS, "vbox");
+    confirmationPanelBox.setAttribute("hidden", "true");
+    confirmationPanelBox.style.position = "absolute";
+    confirmationPanelBox.style.left = "0";
+    confirmationPanelBox.style.top = "0";
+    confirmationPanelBox.style.zIndex = "100";
+    confirmationPanelBox.style.width = "300px";
+    const header = doc.createElementNS(this.XUL_NS, "label");
+    header.setAttribute(
+      "value",
+      `Are you sure you want to disable Tracking Protection?`
+    );
+    
+    const body = doc.createElementNS(this.XUL_NS, "hbox");
+
+    const yesButton = doc.createElementNS(this.XUL_NS, "button");
+    yesButton.addEventListener("command", () => {
+        console.log("You clicked the 'Yes' button on the intro panel's confirmation dialogue.");
+        introPanel.hidePopup();
+        this.introPanelIsShowing = false;
+    });
+    const yesButtonLabel = doc.createElementNS(this.XUL_NS, "label");
+    yesButtonLabel.setAttribute("value", "Yes");
+    yesButton.append(yesButtonLabel);
+
+    const noButton = doc.createElementNS(this.XUL_NS, "button");
+    noButton.addEventListener("command", () => {
+      console.log("You clicked the 'No' button on the intro panel's confirmation dialogue.");
+      this.toggleConfirmation(win, confirmationPanelBox, introPanelBox);
+    });
+    const noButtonLabel = doc.createElementNS(this.XUL_NS, "label");
+    noButtonLabel.setAttribute("value", "No");
+    noButton.append(noButtonLabel);
+
+    body.append(yesButton);
+    body.append(noButton);
+
+    confirmationPanelBox.append(header);
+    confirmationPanelBox.append(body);
+
+    return confirmationPanelBox;
+  }
+
+  toggleConfirmation(win, confirmationPanelBox, introPanelBox) {
+    if (confirmationPanelBox.getAttribute("hidden") === "true") {
+      confirmationPanelBox.setAttribute("hidden", "false");
+      introPanelBox.setAttribute("hidden", "true");
+    } else {
+      confirmationPanelBox.setAttribute("hidden", "true");
+      introPanelBox.setAttribute("hidden", "false");
+    }
   }
 
   async reimplementTrackingProtection(win) {
@@ -616,9 +698,14 @@ class Feature {
         "image",
         "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled");
       button.append(panel);
-      button.addEventListener("command", () => {
-        doc.getElementById("panel");
-        panel.openPopup(button);
+      button.addEventListener("command", (evt) => {
+        // Make sure the user clicked on the pageAction button, otherwise
+        // once the intro panel is closed by the user clicking a button inside
+        // of it, it will trigger the pageAction panel to open immediately.
+        if (evt.target.tagName === "toolbarbutton"
+          && !this.state.introPanelIsShowing) {
+          panel.openPopup(button);
+        }
       });
 
       urlbar.append(button);
