@@ -69,6 +69,7 @@ class Feature {
     this.TP_ENABLED_IN_PRIVATE_WINDOWS = (this.treatment === "control");
     this.PREF_TP_ENABLED_GLOBALLY = "privacy.trackingprotection.enabled";
     this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS = "privacy.trackingprotection.pbmode.enabled";
+    this.PAGE_ACTION_BUTTON_ID = "tracking-protection-study-button";
     this.init(logLevel);
   }
 
@@ -90,18 +91,18 @@ class Feature {
     };
 
     // TODO bdanforth: update newtab messages copy
-    const newTabMessages = {
+    this.newTabMessages = {
       fast: "Firefox blocked ${blockedRequests} trackers today<br/> and saved you ${minutes} minutes",
       private: "Firefox blocked ${blockedRequests} trackers today<br/> from ${blockedCompanies} companies that track your browsing",
     };
     // TODO bdanforth: update with final URLs
-    const learnMoreUrls = {
+    this.learnMoreUrls = {
       fast: "http://www.mozilla.com",
       private: "http://www.mozilla.com",
     };
 
     // TODO bdanforth: update intro panel message copy
-    const introPanelMessages = {
+    this.introPanelMessages = {
       fast: "Tracking protection is great! Would you like to participate in a study?",
       private: "Tracking protection is great! Would you like to participate in a study?",
     };
@@ -124,15 +125,13 @@ class Feature {
       totalBlockedCompanies: 0,
       blockedWebsites: new Set(),
       totalBlockedWebsites: 0,
+      // Checked by the pageAction panel's "command" event listener to make sure
+      // the pageAction panel never opens when the intro panel is currently open
+      introPanelIsShowing: false,
     };
 
     if (this.treatment in this.TREATMENTS) {
-      await this.TREATMENTS[this.treatment](
-        win,
-        introPanelMessages[this.treatment],
-        learnMoreUrls[this.treatment],
-        newTabMessages[this.treatment],
-      );
+      await this.TREATMENTS[this.treatment](win);
     }
 
     // if user toggles built-in TP on/off, end the study
@@ -170,8 +169,10 @@ class Feature {
         browser = msg.target;
         this.state.totalTimeSaved += counter;
         this.state.timeSaved.set(browser, counter);
-        this.showPageAction(browser.getRootNode(), counter);
-        this.setPageActionCounter(browser.getRootNode(), counter);
+        if (this.treatment === "fast") {
+          this.showPageAction(browser.getRootNode(), counter);
+          this.setPageActionCounter(browser.getRootNode(), counter);
+        }
         break;
       default:
         throw new Error(`Message type not recognized, ${ msg.data.action }`);
@@ -214,12 +215,12 @@ class Feature {
           || this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS) {
           const prevState = this.getPreviousTrackingProtectionState();
           const nextState = this.getNextTrackingProtectionState();
-          this.log.debug(prevState, nextState);
           // Rankings -
           // TP ON globally: 3, TP ON private windows only: 2, TP OFF globally: 1
-          reason = (nextState > prevState) ? "ended-positive" : "ended-negative";
-          this.log.debug(`Ending study, treatment: ${ this.treatment },
-            reason: ${ reason }`);
+          reason = (nextState > prevState) ? "user-enabled-builtin-tracking-protection"
+            : "user-disabled-builtin-tracking-protection";
+          this.log.debug("User modified built-in tracking protection settings. Ending study.");
+          this.telemetry({ event: reason });
           await this.endStudy(reason, false);
         }
         break;
@@ -271,18 +272,17 @@ class Feature {
   }
 
   // "fast" and "private" treatments differ only in copy
-  async applyExperimentalTreatment(
-    win, introPanelMessage, learnMoreURL, newTabMessage) {
+  async applyExperimentalTreatment(win) {
     // 1. Initialize built-in Tracking Protection, OFF globally
     Services.prefs.setBoolPref(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, false);
 
     // 2. Show intro panel if addon was just installed
     if (this.reasonName === "ADDON_INSTALL") {
-      this.showIntroPanel(win, introPanelMessage, learnMoreURL);
+      this.shouldShowIntroPanel = true;
     }
 
     // 3. Add new tab variation
-    this.state.newTabMessage = newTabMessage;
+    this.state.newTabMessage = this.newTabMessages[this.treatment];
     Services.mm.loadFrameScript(this.FRAME_SCRIPT_URL, true);
 
     // 4. Add pageAction icon and pageAction panel; this is the complicated part
@@ -316,42 +316,167 @@ class Feature {
   *   - {event: introduction-shown}
   *   - {event: introduction-accept}
   *   - {event: introduction-leave-study}
-  * Note:  Panel WILL NOT SHOW if the only window open is a private window.
+  * Note:  TODO bdanforth: Panel WILL NOT SHOW if the only window open is a private window.
   *
   * @param {ChromeWindow} win
   * @param {String} message
   * @param {String} url
   */
   showIntroPanel(win, message, url) {
+    // Needed to determine if panel should be dismissed due to window close
+    this.introPanelChromeWindow = win;
+    const doc = win.document;
+    const pageActionButton = doc.getElementById(this.PAGE_ACTION_BUTTON_ID);
 
-    const options = {
-      popupIconURL: this.DOORHANGER_ICON,
-      learnMoreURL: url,
-      persistent: true,
-      persistWhileVisible: true,
-    };
+    const introPanel = this.getIntroPanel(win);
+    pageActionButton.append(introPanel);
 
-    const action = {
-      label: "Got it!",
-      accessKey: "G",
-      callback: () => {
-        this.log.debug(`You clicked the button.`);
-      },
-    };
+    this.state.introPanelIsShowing = true;
+    introPanel.openPopup(pageActionButton);
 
-    // Note: With "npm run firefox", panel does not open correctly without a delay
-    // Without delay, the panel flashes briefly at the bottom of the screen.
-    win.setTimeout(() => {
-      win.PopupNotifications.show(
-        win.gBrowser.selectedBrowser,
-        this.DOORHANGER_ID,
-        message,
-        null,
-        action,
-        [],
-        options
-      );
-    }, 1000);
+  }
+
+  getIntroPanel(win) {
+    const doc = win.document;
+    const introPanel = doc.createElementNS(this.XUL_NS, "panel");
+    introPanel.setAttribute("id", "tracking-protection-study-intro-panel");
+    introPanel.setAttribute("type", "arrow");
+    introPanel.setAttribute("level", "parent");
+    introPanel.setAttribute("noautohide", "true");
+    this.addPanelListeners(introPanel, true);
+    introPanel.style.position = "relative";
+    const introPanelBox = doc.createElementNS(this.XUL_NS, "vbox");
+    introPanelBox.style.width = "300px";
+    const confirmationPanelBox
+      = this.getConfirmationPanelBox(doc, introPanelBox, true);
+
+    const header = doc.createElementNS(this.XUL_NS, "label");
+    header.setAttribute(
+      "value",
+      `Tracking Protection is awesome. Continue?`
+    );
+
+    const body = doc.createElementNS(this.XUL_NS, "hbox");
+
+    const yesButton = doc.createElementNS(this.XUL_NS, "button");
+    yesButton.addEventListener("command", () => {
+      this.hideIntroPanel("introduction-accept");
+    });
+    const yesButtonLabel = doc.createElementNS(this.XUL_NS, "label");
+    yesButtonLabel.setAttribute("value", "Yes");
+    yesButton.append(yesButtonLabel);
+
+    const noButton = doc.createElementNS(this.XUL_NS, "button");
+    noButton.addEventListener("command", () => {
+      this.log.debug("You clicked the 'No' button on the intro panel.");
+      this.toggleConfirmation(confirmationPanelBox, introPanelBox);
+      this.telemetry({ event: "introduction-reject" });
+    });
+    const noButtonLabel = doc.createElementNS(this.XUL_NS, "label");
+    noButtonLabel.setAttribute("value", "No");
+    noButton.append(noButtonLabel);
+
+    body.append(yesButton);
+    body.append(noButton);
+
+    introPanelBox.append(header);
+    introPanelBox.append(body);
+
+    introPanel.append(confirmationPanelBox);
+    introPanel.append(introPanelBox);
+
+    // Used to hide intro panel when tab change, window close, or location change occur
+    this.introPanel = introPanel;
+
+    return introPanel;
+  }
+
+  // These listeners are added to both the intro panel and the pageAction panel
+  addPanelListeners(panel, isIntroPanel) {
+    const panelType = isIntroPanel ? "introduction-panel" : "page-action-panel";
+    let panelShownTime,
+      panelHiddenTime,
+      panelOpenTime;
+
+    panel.addEventListener("popupshown", () => {
+      this.log.debug(`${panelType} shown.`);
+      panelShownTime = Date.now();
+      this.telemetry({ event: `${panelType}-shown` });
+    });
+    panel.addEventListener("popuphidden", () => {
+      this.log.debug(`${panelType} hidden.`);
+      panelHiddenTime = Date.now();
+      panelOpenTime =
+        (panelHiddenTime - panelShownTime) / 1000;
+      this.log.debug(`${panelType} was open for ${Math.round(panelOpenTime)} seconds.`);
+      this.telemetry({
+        event: `${panelType}-hidden`,
+        secondsPanelWasShowing: Math.round(panelOpenTime).toString(),
+      });
+    });
+  }
+
+  // Works for both intro panel and pageAction panel.
+  getConfirmationPanelBox(doc, panelBox, isIntroPanel) {
+    const panelType = isIntroPanel ? "intro-panel" : "page-action-panel";
+    const confirmationPanelBox = doc.createElementNS(this.XUL_NS, "vbox");
+    confirmationPanelBox.setAttribute("hidden", "true");
+    confirmationPanelBox.style.position = "absolute";
+    confirmationPanelBox.style.left = "0";
+    confirmationPanelBox.style.top = "0";
+    confirmationPanelBox.style.zIndex = "100";
+    confirmationPanelBox.style.width = "300px";
+    const header = doc.createElementNS(this.XUL_NS, "label");
+    header.setAttribute(
+      "value",
+      `Are you sure you want to disable Tracking Protection?`
+    );
+    
+    const body = doc.createElementNS(this.XUL_NS, "hbox");
+
+    const yesButton = doc.createElementNS(this.XUL_NS, "button");
+    yesButton.addEventListener("command", () => {
+      if (isIntroPanel) {
+        this.hideIntroPanel(`${panelType}-confirmation-leave-study`);
+      }
+      this.endStudy(`${panelType}-confirmation-leave-study`);
+    });
+    const yesButtonLabel = doc.createElementNS(this.XUL_NS, "label");
+    yesButtonLabel.setAttribute("value", "Yes");
+    yesButton.append(yesButtonLabel);
+
+    const noButton = doc.createElementNS(this.XUL_NS, "button");
+    noButton.addEventListener("command", () => {
+      this.log.debug(`You clicked the 'No' button on the ${panelType} confirmation dialogue.`);
+      this.toggleConfirmation(confirmationPanelBox, panelBox);
+      this.telemetry({ event: `${panelType}-confirmation-cancel` });
+    });
+    const noButtonLabel = doc.createElementNS(this.XUL_NS, "label");
+    noButtonLabel.setAttribute("value", "No");
+    noButton.append(noButtonLabel);
+
+    body.append(yesButton);
+    body.append(noButton);
+
+    confirmationPanelBox.append(header);
+    confirmationPanelBox.append(body);
+
+    return confirmationPanelBox;
+  }
+
+  toggleConfirmation(confirmationPanelBox, panelBox) {
+    if (confirmationPanelBox.getAttribute("hidden") === "true") {
+      confirmationPanelBox.setAttribute("hidden", "false");
+      panelBox.setAttribute("hidden", "true");
+    } else {
+      confirmationPanelBox.setAttribute("hidden", "true");
+      panelBox.setAttribute("hidden", "false");
+    }
+  }
+
+  // @param {Object} - data, a string:string key:value object
+  async telemetry(data) {
+    this.studyUtils.telemetry(data);
   }
 
   async reimplementTrackingProtection(win) {
@@ -384,7 +509,7 @@ class Feature {
   /**
   * Three cases of user looking at diff page:
       - switched windows (onOpenWindow)
-      - loading new pages in the same tab (onPageLoad/Frame script)
+      - loading new pages in the same tab (on page load in frame script)
       - switching tabs but not switching windows (tabSelect)
     Each one needs its own separate handler, because each one is detected by its
     own separate event.
@@ -397,6 +522,15 @@ class Feature {
         "TabSelect",
         this.onTabChange.bind(this)
       );
+      // handle the case where the window closed, but intro or pageAction panel
+      // is still open.
+      win.addEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
+    }
+  }
+
+  handleWindowClosing(win) {
+    if (this.state.introPanelIsShowing && win === this.introPanelChromeWindow) {
+      this.hideIntroPanel("window-close");
     }
   }
 
@@ -405,6 +539,8 @@ class Feature {
   // Adds event listeners to newly created windows (browser application window)
   // This method is NOT called when opening a new tab.
   onOpenWindow(xulWindow) {
+
+    // win is a chromeWindow
     var win = xulWindow.QueryInterface(Ci.nsIInterfaceRequestor)
       .getInterface(Ci.nsIDOMWindowInternal || Ci.nsIDOMWindow);
     win.addEventListener(
@@ -423,15 +559,38 @@ class Feature {
     // ensure the location change event is occuring in the top frame (not an
     // iframe for example) and also that a different page is being loaded
     if (progress.isTopLevel && flags !== LOCATION_CHANGE_SAME_DOCUMENT) {
-      // if tracking protection has already blocked any resources for this tab,
-      // reset the counter on the pageAction
-      if (this.state.blockedResources.has(browser)) {
-        this.showPageAction(browser.getRootNode(), 0);
-        this.setPageActionCounter(browser.getRootNode(), 0);
-        this.state.blockedResources.set(browser, 0);
-        this.state.timeSaved.set(browser, 0);
+      this.showPageAction(browser.getRootNode(), 0);
+      this.setPageActionCounter(browser.getRootNode(), 0);
+      this.state.blockedResources.set(browser, 0);
+      this.state.timeSaved.set(browser, 0);
+      
+      // Hide intro panel on location change in the same tab if showing
+      if (this.state.introPanelIsShowing && this.introPanelBrowser === browser) {
+        this.hideIntroPanel("location-change-same-tab");
+      }
+
+      if (this.shouldShowIntroPanel
+        && (uri.scheme === "http" || uri.scheme === "https")) {
+        const win = Services.wm.getMostRecentWindow("navigator:browser");
+        this.introPanelBrowser = browser;
+        this.showIntroPanel(
+          win,
+          this.introPanelMessages[this.treatment],
+          this.learnMoreUrls[this.treatment]
+        );
+        this.shouldShowIntroPanel = false;
       }
     }
+  }
+
+  hideIntroPanel(details) {
+    this.introPanel.hidePopup();
+    this.state.introPanelIsShowing = false;
+    this.log.debug(`Intro panel has been dismissed by user due to ${details}.`);
+    this.telemetry({
+      event: "introduction-dismissed",
+      details,
+    });
   }
 
   /**
@@ -558,72 +717,95 @@ class Feature {
    * @param {number} counter - blocked count for the current page.
    */
   showPageAction(doc, counter) {
-    const win = Services.wm.getMostRecentWindow("navigator:browser");
-
-    let button = doc.getElementById("tracking-protection-study-button");
-    if (button) {
-      button.parentElement.removeChild(button);
-    }
-    doc.getElementById("tracking");
+    const pageActionPanel = this.getPageActionPanel(doc);
     const urlbar = doc.getElementById("page-action-buttons");
 
+    let pageActionButton = doc.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
+    if (!pageActionButton) {
+      pageActionButton = doc.createElementNS(this.XUL_NS, "toolbarbutton");
+      pageActionButton.style.backgroundColor = "green";
+      pageActionButton.setAttribute("id", `${this.PAGE_ACTION_BUTTON_ID}`);
+      pageActionButton.setAttribute(
+        "image",
+        "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled");
+      pageActionButton.append(pageActionPanel);
+      pageActionButton.addEventListener("command", (evt) => {
+        // Make sure the user clicked on the pageAction button, otherwise
+        // once the intro panel is closed by the user clicking a button inside
+        // of it, it will trigger the pageAction panel to open immediately.
+        if (evt.target.tagName === "toolbarbutton"
+          && !this.state.introPanelIsShowing) {
+          pageActionPanel.openPopup(pageActionButton);
+        }
+      });
+
+      urlbar.append(pageActionButton);
+    }
+  }
+
+  getPageActionPanel(doc) {
     const panel = doc.createElementNS(this.XUL_NS, "panel");
     panel.setAttribute("id", "tracking-protection-study-panel");
     panel.setAttribute("type", "arrow");
     panel.setAttribute("level", "parent");
+    this.addPanelListeners(panel, false);
     const panelBox = doc.createElementNS(this.XUL_NS, "vbox");
+    panelBox.style.width = "300px";
+    const confirmationPanelBox
+      = this.getConfirmationPanelBox(doc, panelBox, false);
 
     const header = doc.createElementNS(this.XUL_NS, "label");
     header.setAttribute(
       "value",
-      `Firefox is blocking ${counter} elements on this page`
+      `Tracking Protection enabled`
     );
 
-    const controls = doc.createElementNS(this.XUL_NS, "hbox");
+    const body = doc.createElementNS(this.XUL_NS, "hbox");
 
-    const group = doc.createElementNS(this.XUL_NS, "radiogroup");
-    const enabled = doc.createElementNS(this.XUL_NS, "radio");
-    enabled.setAttribute("label", "Enable on this site");
-    enabled.addEventListener("click", () => {
-      win.gBrowser.reload();
-    });
-    const disabled = doc.createElementNS(this.XUL_NS, "radio");
-    disabled.setAttribute("label", "Disable on this site");
-    disabled.addEventListener("click", () => {
-      win.gBrowser.reload();
-    });
-    group.append(enabled);
-    group.append(disabled);
-    controls.append(group);
+    const bodyLabel = doc.createElementNS(this.XUL_NS, "label");
+    const secondStatement = this.treatment === "private"
+      ? `${this.state.totalBlockedCompanies} companies blocked`
+      : `${this.state.totalTimeSaved} seconds saved`;
+    bodyLabel.setAttribute(
+      "value",
+      `${this.state.totalBlockedResources} trackers blocked
+      ${secondStatement}`
+    );
+    body.append(bodyLabel);
 
-    const footer = doc.createElementNS(this.XUL_NS, "label");
-    footer.setAttribute("value", "If the website appears broken, consider" +
-                                 " disabling tracking protection and" +
-                                 " refreshing the page.");
+    const footer = doc.createElementNS(this.XUL_NS, "vbox");
+    
+    const footerLabel = doc.createElementNS(this.XUL_NS, "label");
+    footerLabel.setAttribute(
+      "value",
+      "Tracking protection speeds up page loads by automatically shutting down trackers."
+    );
+    footer.append(footerLabel);
+
+    const noButton = doc.createElementNS(this.XUL_NS, "button");
+    noButton.addEventListener("command", () => {
+      this.log.debug("You clicked the 'No' button on the pageAction panel.");
+      // TODO bdanforth: show confirmation before ending study, like intro panel
+      this.telemetry({ event: "pageAction-reject" });
+      this.toggleConfirmation(confirmationPanelBox, panelBox);
+    });
+    const noButtonLabel = doc.createElementNS(this.XUL_NS, "label");
+    noButtonLabel.setAttribute("value", "Disable Protection");
+    noButton.append(noButtonLabel);
+    footer.append(noButton);
 
     panelBox.append(header);
-    panelBox.append(controls);
+    panelBox.append(body);
     panelBox.append(footer);
 
     panel.append(panelBox);
+    panel.append(confirmationPanelBox);
 
-    button = doc.createElementNS(this.XUL_NS, "toolbarbutton");
-    button.style.backgroundColor = "green";
-    button.setAttribute("id", "tracking-protection-study-button");
-    button.setAttribute(
-      "image",
-      "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled");
-    button.append(panel);
-    button.addEventListener("command", () => {
-      doc.getElementById("panel");
-      panel.openPopup(button);
-    });
-
-    urlbar.append(button);
+    return panel;
   }
 
   setPageActionCounter(doc, counter) {
-    const toolbarButton = doc.getElementById("tracking-protection-study-button");
+    const toolbarButton = doc.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
     if (toolbarButton) {
       // if "fast" treatment, convert counter from ms to seconds and add unit "s"
       const label = this.treatment === "private" ? counter
@@ -633,7 +815,7 @@ class Feature {
   }
 
   hidePageAction(doc) {
-    const button = doc.getElementById("tracking-protection-study-button");
+    const button = doc.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
     if (button) {
       button.parentElement.removeChild(button);
     }
@@ -646,13 +828,14 @@ class Feature {
   * Only one icon in URL across all tabs, have to update it per page.
   */
   onTabChange(evt) {
-    const win = evt.target.ownerGlobal;
-    const currentURI = win.gBrowser.currentURI;
-    // Don't show the page action if page is not http or https
-    if (currentURI.scheme !== "http" && currentURI.scheme !== "https") {
-      this.hidePageAction(win.document);
-      return;
+    // Hide intro panel on tab change if showing
+    if (this.state.introPanelIsShowing) {
+      this.hideIntroPanel("tab-change");
     }
+
+    const win = evt.target.ownerGlobal;
+    // TODO bdanforth: use currentURI to hide pageAction icon when not at an http or https site 
+    const currentURI = win.gBrowser.currentURI;
 
     const currentWin = Services.wm.getMostRecentWindow("navigator:browser");
 
@@ -660,16 +843,16 @@ class Feature {
     // the status of the pageAction, then reshow it if the new page has had any
     // resources blocked.
     if (win === currentWin) {
-      this.hidePageAction(win.document);
       // depending on the treatment branch, we want the count of timeSaved
       // ("fast") or blockedResources ("private")
-      const counter = this.treatment === "private" ?
+      let counter = this.treatment === "private" ?
         this.state.blockedResources.get(win.gBrowser.selectedBrowser) :
         this.state.timeSaved.get(win.gBrowser.selectedBrowser);
-      if (counter) {
-        this.showPageAction(win.document, counter);
-        this.setPageActionCounter(win.document, counter);
+      if (!counter) {
+        counter = 0;
       }
+      this.showPageAction(win.document, counter);
+      this.setPageActionCounter(win.document, counter);
     }
   }
 
@@ -694,15 +877,22 @@ class Feature {
         continue;
       }
 
-      const button = win.document.getElementById("tracking-protection-study");
+      const button = win.document.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
       if (button) {
         button.parentElement.removeChild(button);
       }
 
-      WebRequest.onBeforeRequest.removeListener(this.onBeforeRequest);
+      const filter = {urls: new win.MatchPatternSet(["*://*/*"])};
+      WebRequest.onBeforeRequest.removeListener(
+        this.onBeforeRequest.bind(this),
+        // listener will only be called for requests whose targets match the filter
+        filter,
+        ["blocking"]
+      );
       win.gBrowser.removeTabsProgressListener(this);
       win.gBrowser.tabContainer.removeEventListener("TabSelect", this.onTabChange);
-      win.removeEventListener("load", this.onPageLoad);
+
+      win.removeEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
 
       Services.wm.removeListener(this);
     }
@@ -729,9 +919,5 @@ class Feature {
   removeBuiltInTrackingProtectionListeners() {
     Services.prefs.removeObserver(this.PREF_TP_ENABLED_GLOBALLY, this);
     Services.prefs.removeObserver(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, this);
-  }
-
-  telemetry(stringStringMap) {
-    this.studyUtils.telemetry(stringStringMap);
   }
 }
