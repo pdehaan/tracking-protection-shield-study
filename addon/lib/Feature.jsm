@@ -69,6 +69,7 @@ class Feature {
     this.TP_ENABLED_IN_PRIVATE_WINDOWS = (this.treatment === "control");
     this.PREF_TP_ENABLED_GLOBALLY = "privacy.trackingprotection.enabled";
     this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS = "privacy.trackingprotection.pbmode.enabled";
+    this.PAGE_ACTION_BUTTON_ID = "tracking-protection-study-button";
     this.init(logLevel);
   }
 
@@ -214,12 +215,12 @@ class Feature {
           || this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS) {
           const prevState = this.getPreviousTrackingProtectionState();
           const nextState = this.getNextTrackingProtectionState();
-          this.log.debug(prevState, nextState);
           // Rankings -
           // TP ON globally: 3, TP ON private windows only: 2, TP OFF globally: 1
-          reason = (nextState > prevState) ? "ended-positive" : "ended-negative";
-          this.log.debug(`Ending study, treatment: ${ this.treatment },
-            reason: ${ reason }`);
+          reason = (nextState > prevState) ? "user-enabled-builtin-tracking-protection"
+            : "user-disabled-builtin-tracking-protection";
+          this.log.debug("User modified built-in tracking protection settings. Ending study.");
+          this.telemetry({ event: reason });
           await this.endStudy(reason, false);
         }
         break;
@@ -335,16 +336,20 @@ class Feature {
     introPanel.setAttribute("level", "parent");
     introPanel.setAttribute("noautohide", "true");
     introPanel.addEventListener("popupshown", () => {
-      console.log("Intro panel shown.");
+      this.log.debug("Intro panel shown.");
       introPanelShownTime = Date.now();
+      this.telemetry({ event: "introduction-shown" });
     });
     introPanel.addEventListener("popuphidden", () => {
-      console.log("Intro panel hidden.");
+      this.log.debug("Intro panel hidden.");
       introPanelHiddenTime = Date.now();
       introPanelOpenTime =
         (introPanelHiddenTime - introPanelShownTime) / 1000;
-      console.log(`Intro panel was open for ${Math.round(introPanelOpenTime)} seconds`);
-
+      this.log.debug(`Intro panel was open for ${Math.round(introPanelOpenTime)} seconds.`);
+      this.telemetry({
+        event: "introduction-hidden",
+        secondsIntroductionWasShowing: Math.round(introPanelOpenTime).toString(),
+      });
     });
     introPanel.style.position = "relative";
     const introPanelBox = doc.createElementNS(this.XUL_NS, "vbox");
@@ -361,9 +366,10 @@ class Feature {
 
     const yesButton = doc.createElementNS(this.XUL_NS, "button");
     yesButton.addEventListener("command", () => {
-        console.log("You clicked the 'Yes' button on the intro panel.");
-        introPanel.hidePopup();
-        this.state.introPanelIsShowing = false;
+      this.log.debug("You clicked the 'Yes' button on the intro panel.");
+      introPanel.hidePopup();
+      this.state.introPanelIsShowing = false;
+      this.telemetry({ event: "introduction-accept" });
     });
     const yesButtonLabel = doc.createElementNS(this.XUL_NS, "label");
     yesButtonLabel.setAttribute("value", "Yes");
@@ -371,8 +377,9 @@ class Feature {
 
     const noButton = doc.createElementNS(this.XUL_NS, "button");
     noButton.addEventListener("command", () => {
-      console.log("You clicked the 'No' button on the intro panel.");
+      this.log.debug("You clicked the 'No' button on the intro panel.");
       this.toggleConfirmation(win, confirmationPanelBox, introPanelBox);
+      this.telemetry({ event: "introduction-reject" });
     });
     const noButtonLabel = doc.createElementNS(this.XUL_NS, "label");
     noButtonLabel.setAttribute("value", "No");
@@ -414,9 +421,11 @@ class Feature {
 
     const yesButton = doc.createElementNS(this.XUL_NS, "button");
     yesButton.addEventListener("command", () => {
-        console.log("You clicked the 'Yes' button on the intro panel's confirmation dialogue.");
-        introPanel.hidePopup();
-        this.state.introPanelIsShowing = false;
+      this.log.debug("You clicked the 'Yes' button on the intro panel's confirmation dialogue.");
+      introPanel.hidePopup();
+      this.state.introPanelIsShowing = false;
+      this.telemetry({ event: "introduction-confirmation-leave-study" });
+      this.endStudy("introduction-confirmation-leave-study");
     });
     const yesButtonLabel = doc.createElementNS(this.XUL_NS, "label");
     yesButtonLabel.setAttribute("value", "Yes");
@@ -424,8 +433,9 @@ class Feature {
 
     const noButton = doc.createElementNS(this.XUL_NS, "button");
     noButton.addEventListener("command", () => {
-      console.log("You clicked the 'No' button on the intro panel's confirmation dialogue.");
+      this.log.debug("You clicked the 'No' button on the intro panel's confirmation dialogue.");
       this.toggleConfirmation(win, confirmationPanelBox, introPanelBox);
+      this.telemetry({ event: "introduction-confirmation-cancel" });
     });
     const noButtonLabel = doc.createElementNS(this.XUL_NS, "label");
     noButtonLabel.setAttribute("value", "No");
@@ -448,6 +458,11 @@ class Feature {
       confirmationPanelBox.setAttribute("hidden", "true");
       introPanelBox.setAttribute("hidden", "false");
     }
+  }
+
+  // @param {Object} - data, a string:string key:value object
+  async telemetry(data) {
+    this.studyUtils.telemetry(data);
   }
 
   async reimplementTrackingProtection(win) {
@@ -503,7 +518,8 @@ class Feature {
     if (this.state.introPanelIsShowing && win === this.introPanelChromeWindow) {
       this.introPanel.hidePopup();
       this.state.introPanelIsShowing = false;
-      console.log("Intro panel has been dismissed by user closing its window.");
+      this.log.debug("Intro panel has been dismissed by user closing its window.");
+      this.telemetry({ event: "introduction-dismissed" });
     }
   }
 
@@ -541,7 +557,8 @@ class Feature {
       if (this.state.introPanelIsShowing && this.introPanelBrowser === browser) {
         this.introPanel.hidePopup();
         this.state.introPanelIsShowing = false;
-        console.log("Intro panel has been dismissed by user from page change in same tab.");
+        this.log.debug("Intro panel has been dismissed by user from page change in same tab.");
+        this.telemetry({ event: "introduction-dismissed" });
       }
 
       if (this.shouldShowIntroPanel
@@ -728,11 +745,11 @@ class Feature {
 
     panel.append(panelBox);
 
-    let button = doc.getElementById("tracking-protection-study-button");
+    let button = doc.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
     if (!button) {
       button = doc.createElementNS(this.XUL_NS, "toolbarbutton");
       button.style.backgroundColor = "green";
-      button.setAttribute("id", "tracking-protection-study-button");
+      button.setAttribute("id", `${this.PAGE_ACTION_BUTTON_ID}`);
       button.setAttribute(
         "image",
         "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled");
@@ -752,7 +769,7 @@ class Feature {
   }
 
   setPageActionCounter(doc, counter) {
-    const toolbarButton = doc.getElementById("tracking-protection-study-button");
+    const toolbarButton = doc.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
     if (toolbarButton) {
       // if "fast" treatment, convert counter from ms to seconds and add unit "s"
       const label = this.treatment === "private" ? counter
@@ -762,7 +779,7 @@ class Feature {
   }
 
   hidePageAction(doc) {
-    const button = doc.getElementById("tracking-protection-study-button");
+    const button = doc.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
     if (button) {
       button.parentElement.removeChild(button);
     }
@@ -779,7 +796,8 @@ class Feature {
     if (this.state.introPanelIsShowing) {
       this.introPanel.hidePopup();
       this.state.introPanelIsShowing = false;
-      console.log("Intro panel has been dismissed by user from tab change.");
+      this.log.debug("Intro panel has been dismissed by user from tab change.");
+      this.telemetry({ event: "introduction-dismissed" });
     }
 
     const win = evt.target.ownerGlobal;
@@ -826,12 +844,18 @@ class Feature {
         continue;
       }
 
-      const button = win.document.getElementById("tracking-protection-study");
+      const button = win.document.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
       if (button) {
         button.parentElement.removeChild(button);
       }
 
-      WebRequest.onBeforeRequest.removeListener(this.onBeforeRequest);
+      const filter = {urls: new win.MatchPatternSet(["*://*/*"])};
+      WebRequest.onBeforeRequest.removeListener(
+        this.onBeforeRequest.bind(this),
+        // listener will only be called for requests whose targets match the filter
+        filter,
+        ["blocking"]
+      );
       win.gBrowser.removeTabsProgressListener(this);
       win.gBrowser.tabContainer.removeEventListener("TabSelect", this.onTabChange);
 
@@ -862,9 +886,5 @@ class Feature {
   removeBuiltInTrackingProtectionListeners() {
     Services.prefs.removeObserver(this.PREF_TP_ENABLED_GLOBALLY, this);
     Services.prefs.removeObserver(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, this);
-  }
-
-  telemetry(stringStringMap) {
-    this.studyUtils.telemetry(stringStringMap);
   }
 }
