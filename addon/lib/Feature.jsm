@@ -710,37 +710,49 @@ class Feature {
     panel.setAttribute("type", "arrow");
     panel.setAttribute("level", "parent");
     const panelBox = doc.createElementNS(this.XUL_NS, "vbox");
+    panelBox.style.width = "300px !important";
 
     const header = doc.createElementNS(this.XUL_NS, "label");
     header.setAttribute(
       "value",
-      `Firefox is blocking ${counter} elements on this page`
+      `Tracking Protection enabled`
     );
 
-    const controls = doc.createElementNS(this.XUL_NS, "hbox");
+    const body = doc.createElementNS(this.XUL_NS, "hbox");
 
-    const group = doc.createElementNS(this.XUL_NS, "radiogroup");
-    const enabled = doc.createElementNS(this.XUL_NS, "radio");
-    enabled.setAttribute("label", "Enable on this site");
-    enabled.addEventListener("click", () => {
-      win.gBrowser.reload();
-    });
-    const disabled = doc.createElementNS(this.XUL_NS, "radio");
-    disabled.setAttribute("label", "Disable on this site");
-    disabled.addEventListener("click", () => {
-      win.gBrowser.reload();
-    });
-    group.append(enabled);
-    group.append(disabled);
-    controls.append(group);
+    const bodyLabel = doc.createElementNS(this.XUL_NS, "label");
+    const secondStatement = this.treatment === "private"
+      ? `${this.state.totalBlockedCompanies} companies blocked`
+      : `${this.state.totalTimeSaved} seconds saved`;
+    bodyLabel.setAttribute(
+      "value",
+      `${this.state.totalBlockedResources} trackers blocked
+      ${secondStatement}`
+    );
+    body.append(bodyLabel);
 
-    const footer = doc.createElementNS(this.XUL_NS, "label");
-    footer.setAttribute("value", "If the website appears broken, consider" +
-                                 " disabling tracking protection and" +
-                                 " refreshing the page.");
+    const footer = doc.createElementNS(this.XUL_NS, "vbox");
+    
+    const footerLabel = doc.createElementNS(this.XUL_NS, "label");
+    footerLabel.setAttribute(
+      "value",
+      "Tracking protection speeds up page loads by automatically shutting down trackers."
+    );
+    footer.append(footerLabel);
+
+    const noButton = doc.createElementNS(this.XUL_NS, "button");
+    noButton.addEventListener("command", () => {
+      this.log.debug("You clicked the 'No' button on the pageAction panel.");
+      // TODO bdanforth: show confirmation before ending study, like intro panel
+      this.telemetry({ event: "pageAction-reject" });
+    });
+    const noButtonLabel = doc.createElementNS(this.XUL_NS, "label");
+    noButtonLabel.setAttribute("value", "Disable Protection");
+    noButton.append(noButtonLabel);
+    footer.append(noButton);
 
     panelBox.append(header);
-    panelBox.append(controls);
+    panelBox.append(body);
     panelBox.append(footer);
 
     panel.append(panelBox);
