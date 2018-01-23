@@ -9,17 +9,36 @@
   </head>
   <body>
     <div id="tracking-protection-study-intro-panel-box">
-      <header class="tracking-protection-study-header">
-        <img class="tracking-protection-study-hero" src="https://raw.githubusercontent.com/mozilla/blok/master/src/img/blok-96.png" />
+      <header id="tracking-protection-study-header">
+        <img id="tracking-protection-study-hero" src="resource://tracking-protection-messaging/content/shield-icon.png" />
         Freedom from Ads and Trackers with Tracking Protection
       </header>
-      <main class="tracking-protection-study-intro-main">
+      <main id="tracking-protection-study-intro-main">
         <p>
           Only Firefox's built in Tracking Protection blocks ads and trackers that can get in the way of your browsing, leaving you free to browse without interruption and without being watched.
         </p>
-        <button class="tracking-protection-study-button tracking-protection-study-primary-button">Keep Protecting Me</button>
+        <button id="tracking-protection-study-primary-button" class="tracking-protection-study-button">Keep Protecting Me</button>
         <br/>
-        <p class="tracking-protection-study-link">Disable Protection</p>
+        <button id="tracking-protection-study-secondary-button">Disable Protection</button>
+      </main>
+    </div>
+    <div id="tracking-protection-study-confirmation-panel-box" class="hidden">
+      <p id="tracking-protection-study-confirmation-header">
+        <img id="tracking-protection-study-confirmation-hero" src="https://raw.githubusercontent.com/mozilla/blok/master/src/img/blok-96.png" />
+        Disable Tracking Protection?
+      <main id="tracking-protection-study-confirmation-main">
+        <p>
+          This will globally disable tracking protection for your browser and remove the icon.
+        </p>
+        <p>
+          Are you sure you want to disable tracking protection?
+        </p>
+        <div id="tracking-protection-study-confirmation-button-group">
+          <button id="tracking-protection-study-confirmation-default-button" class="tracking-protection-study-button">Cancel</button>
+          <button id="tracking-protection-study-confirmation-secondary-button" class="tracking-protection-study-button">
+            Disable
+          </button>
+        </div>
       </main>
     </div>
     <script src="resource://tracking-protection-messaging/content/scripts/intro-panel.js"></script>

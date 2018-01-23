@@ -391,7 +391,7 @@ class Feature {
       .onChromeListening();
     // call a method in the page script from the JSM
     this.embeddedBrowser.contentWindow.wrappedJSObject
-      .addCustomContent("TPStudy: data can be sent to page script here.");
+      .addCustomContent("test");
   }
 
   // This is a method my page scripts can call to pass messages to the JSM
@@ -407,36 +407,34 @@ class Feature {
 
   handleUIEvent(message, data) {
     switch (message) {
-      case "FocusedCFR::action":
-        console.log(message);
+      case "introduction-accept":
+        this.hideIntroPanel(message);
         break;
-      case "FocusedCFR::dismiss":
-        console.log(message);
+      case "introduction-reject":
+        this.log.debug("You clicked 'Disable Protection' on the intro panel.");
+        this.telemetry({ event: message });
         break;
-      case "FocusedCFR::close":
-        console.log(message);
+      case "introduction-confirmation-cancel":
+        this.log.debug("You clicked 'Cancel' on the intro confirmation panel.");
+        this.telemetry({ event: message });
         break;
-      case "FocusedCFR::openUrl":
-        console.log(message, data);
+      case "introduction-confirmation-leave-study":
+        this.log.debug("You clicked 'Disable' on the intro confirmation panel.");
+        this.hideIntroPanel(message);
+        this.endStudy(message);
         break;
-      case "FocusedCFR::browserResize":
+      case "browser-resize":
         this.resizeBrowser(JSON.parse(data));
-        break;
-      case "FocusedCFR::panelState":
-        console.log(`Panel ${data}`);
         break;
       default:
         throw new Error(`UI event is not recognized, ${message}`);
-        break;
     }
   }
 
   // These listeners are added to both the intro panel and the pageAction panel
   addPanelListeners(panel, isIntroPanel) {
     const panelType = isIntroPanel ? "introduction-panel" : "page-action-panel";
-    let panelShownTime,
-      panelHiddenTime,
-      panelOpenTime;
+    let panelShownTime;
 
     panel.addEventListener("popupshown", () => {
       this.log.debug(`${panelType} shown.`);
@@ -445,8 +443,8 @@ class Feature {
     });
     panel.addEventListener("popuphidden", () => {
       this.log.debug(`${panelType} hidden.`);
-      panelHiddenTime = Date.now();
-      panelOpenTime =
+      const panelHiddenTime = Date.now();
+      const panelOpenTime =
         (panelHiddenTime - panelShownTime) / 1000;
       this.log.debug(`${panelType} was open for ${Math.round(panelOpenTime)} seconds.`);
       this.telemetry({

@@ -13,21 +13,22 @@ body {
   align-items: center;
   font-size: 15px;
   text-align: center;
+  visibility: visible;
 }
 
-.tracking-protection-study-header {
+#tracking-protection-study-header {
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
 }
 
-.tracking-protection-study-hero {
+#tracking-protection-study-hero {
   display: block;
   margin-bottom: 15px;
 }
 
-.tracking-protection-study-intro-main {
+#tracking-protection-study-intro-main {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -36,6 +37,7 @@ body {
 }
 
 .tracking-protection-study-button {
+  margin: 20px 0 0;
   border-radius: 2px;
   border-width: 0;
   height: 32px;
@@ -47,50 +49,140 @@ body {
   cursor: pointer;
 }
 
-.tracking-protection-study-primary-button {
+#tracking-protection-study-primary-button {
   color: #fff;
   background-color: #0060df;
 }
 
-.tracking-protection-study-primary-button:hover {
+#tracking-protection-study-primary-button:hover {
   background-color: #003eaa;
 }
 
-.tracking-protection-study-primary-button:active {
+#tracking-protection-study-primary-button:active {
   background-color: #002275;
 }
 
-.tracking-protection-study-primary-button:focus {
+#tracking-protection-study-primary-button:focus {
   box-shadow: inset 2px 2px #0a84ff, 3px 3px rgba(10, 132, 255, .3);
 }
 
-.tracking-protection-study-default-button {
+#tracking-protection-study-default-button {
   color: #0c0c0d;
   background-color: #e1e1e2;
 }
 
-.tracking-protection-study-default-button:hover {
+#tracking-protection-study-default-button:hover {
   background-color: rgba(12, 12, 13, .2);
 }
 
-.tracking-protection-study-default-button:active {
+#tracking-protection-study-default-button:active {
   background-color: rgba(12, 12, 13, .3);
 }
 
-.tracking-protection-study-default-button:focused {
+#tracking-protection-study-default-button:focus {
     box-shadow: inset 2px 2px #0a84ff, 3px 3px rgba(10, 132, 255, .3);
 }
 
-.tracking-protection-study-link {
+#tracking-protection-study-secondary-button {
   background-color: transparent;
   color: #0060df;
+  border: 0;
+  padding-top: 10px;
   cursor: pointer;
 }
 
-.tracking-protection-study-link:hover {
+#tracking-protection-study-secondary-button:hover {
   text-decoration: underline;
 }
 
-.tracking-protection-study-link:active {
+#tracking-protection-study-secondary-button:active {
   color: #003eaa;
+}
+
+/* ----- CONFIRMATION SCREEN ----- */
+
+body {
+  position: relative;
+}
+
+#tracking-protection-study-confirmation-panel-box {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-size: 15px;
+  visibility: visible;
+  font-family: sans-serif;
+  text-align: center;
+}
+
+#tracking-protection-study-confirmation-panel-box.hidden,
+#tracking-protection-study-intro-panel-box.hidden {
+  visibility: hidden;
+}
+
+#tracking-protection-study-confirmation-header {
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+#tracking-protection-study-confirmation-hero {
+  display: block;
+  margin-bottom: 15px;
+}
+
+#tracking-protection-study-confirmation-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  font-size: 12px;
+}
+
+#tracking-protection-study-confirmation-button-group {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-gap: 10px;
+}
+
+#tracking-protection-study-confirmation-default-button {
+  color: #0c0c0d;
+  background-color: #e1e1e2;
+}
+
+#tracking-protection-study-confirmation-default-button:hover {
+  background-color: rgba(12, 12, 13, .2);
+}
+
+#tracking-protection-study-confirmation-default-button:active {
+  background-color: rgba(12, 12, 13, .3);
+}
+
+#tracking-protection-study-confirmation-default-button:focus {
+    box-shadow: inset 2px 2px #0a84ff, 3px 3px rgba(10, 132, 255, .3);
+}
+
+#tracking-protection-study-confirmation-secondary-button {
+  grid-column: 2;
+  grid-row: 1;
+  background-color: #d70022;
+  color: white;
+}
+
+#tracking-protection-study-confirmation-secondary-button:hover {
+  background-color: #a4000f;
+}
+
+#tracking-protection-study-confirmation-secondary-button:active {
+  background-color: #5a0002;
+}
+
+#tracking-protection-study-confirmation-secondary-button:focus {
+  box-shadow: inset 2px 2px #0a84ff, 3px 3px rgba(10, 132, 255, .3);
 }
