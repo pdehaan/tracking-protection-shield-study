@@ -1,0 +1,96 @@
+/* Reference: firefox.design.com */
+
+body {
+  margin: 0;
+  background-color: #fcfcfc;
+}
+
+#tracking-protection-study-intro-panel-box {
+  font-family: sans-serif;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-size: 15px;
+  text-align: center;
+}
+
+.tracking-protection-study-header {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.tracking-protection-study-hero {
+  display: block;
+  margin-bottom: 15px;
+}
+
+.tracking-protection-study-intro-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  font-size: 12px;
+}
+
+.tracking-protection-study-button {
+  border-radius: 2px;
+  border-width: 0;
+  height: 32px;
+  padding-left: 8px;
+  padding-right: 8px;
+  font-size: 13px;
+  font-weight: 400;
+  width: auto;
+  cursor: pointer;
+}
+
+.tracking-protection-study-primary-button {
+  color: #fff;
+  background-color: #0060df;
+}
+
+.tracking-protection-study-primary-button:hover {
+  background-color: #003eaa;
+}
+
+.tracking-protection-study-primary-button:active {
+  background-color: #002275;
+}
+
+.tracking-protection-study-primary-button:focus {
+  box-shadow: inset 2px 2px #0a84ff, 3px 3px rgba(10, 132, 255, .3);
+}
+
+.tracking-protection-study-default-button {
+  color: #0c0c0d;
+  background-color: #e1e1e2;
+}
+
+.tracking-protection-study-default-button:hover {
+  background-color: rgba(12, 12, 13, .2);
+}
+
+.tracking-protection-study-default-button:active {
+  background-color: rgba(12, 12, 13, .3);
+}
+
+.tracking-protection-study-default-button:focused {
+    box-shadow: inset 2px 2px #0a84ff, 3px 3px rgba(10, 132, 255, .3);
+}
+
+.tracking-protection-study-link {
+  background-color: transparent;
+  color: #0060df;
+  cursor: pointer;
+}
+
+.tracking-protection-study-link:hover {
+  text-decoration: underline;
+}
+
+.tracking-protection-study-link:active {
+  color: #003eaa;
+}

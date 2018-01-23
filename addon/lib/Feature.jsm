@@ -343,52 +343,92 @@ class Feature {
     introPanel.setAttribute("type", "arrow");
     introPanel.setAttribute("level", "parent");
     introPanel.setAttribute("noautohide", "true");
+    introPanel.setAttribute("flip", "both");
+    introPanel.setAttribute("position", "bottomcenter topright");
     this.addPanelListeners(introPanel, true);
-    introPanel.style.position = "relative";
-    const introPanelBox = doc.createElementNS(this.XUL_NS, "vbox");
-    introPanelBox.style.width = "300px";
-    const confirmationPanelBox
-      = this.getConfirmationPanelBox(doc, introPanelBox, true);
-
-    const header = doc.createElementNS(this.XUL_NS, "label");
-    header.setAttribute(
-      "value",
-      `Tracking Protection is awesome. Continue?`
-    );
-
-    const body = doc.createElementNS(this.XUL_NS, "hbox");
-
-    const yesButton = doc.createElementNS(this.XUL_NS, "button");
-    yesButton.addEventListener("command", () => {
-      this.hideIntroPanel("introduction-accept");
-    });
-    const yesButtonLabel = doc.createElementNS(this.XUL_NS, "label");
-    yesButtonLabel.setAttribute("value", "Yes");
-    yesButton.append(yesButtonLabel);
-
-    const noButton = doc.createElementNS(this.XUL_NS, "button");
-    noButton.addEventListener("command", () => {
-      this.log.debug("You clicked the 'No' button on the intro panel.");
-      this.toggleConfirmation(confirmationPanelBox, introPanelBox);
-      this.telemetry({ event: "introduction-reject" });
-    });
-    const noButtonLabel = doc.createElementNS(this.XUL_NS, "label");
-    noButtonLabel.setAttribute("value", "No");
-    noButton.append(noButtonLabel);
-
-    body.append(yesButton);
-    body.append(noButton);
-
-    introPanelBox.append(header);
-    introPanelBox.append(body);
-
-    introPanel.append(confirmationPanelBox);
-    introPanel.append(introPanelBox);
+    const embeddedBrowser = doc.createElementNS(this.XUL_NS, "browser");
+    embeddedBrowser.setAttribute("id", `${STUDY}-browser`);
+    embeddedBrowser.setAttribute("src", `resource://${STUDY}/content/intro-panel.html`);
+    embeddedBrowser.setAttribute("disableglobalhistory", "true");
+    embeddedBrowser.setAttribute("type", "content");
+    embeddedBrowser.setAttribute("flex", "1");
+    introPanel.appendChild(embeddedBrowser);
+    this.embeddedBrowser = embeddedBrowser;
+    this.addBrowserContent();
 
     // Used to hide intro panel when tab change, window close, or location change occur
     this.introPanel = introPanel;
 
     return introPanel;
+  }
+
+  addBrowserContent() {
+    this.embeddedBrowser.addEventListener(
+      "load",
+      this.handleEmbeddedBrowserLoad.bind(this),
+      // capture is required: event target is the HTML document <browser> loads
+      { capture: true }
+    );
+  }
+
+  handleEmbeddedBrowserLoad() {
+    // about:blank loads in a <browser> before the value of its src attribute,
+    // so each embeddedBrowser actually loads twice.
+    // Make sure we are only accessing our src page
+    // accessing about:blank's contentWindow returns a dead object
+    if (!this.embeddedBrowser.contentWindow) {
+      return;
+    }
+    // enable messaging from page script to JSM
+    Cu.exportFunction(
+      this.sendMessageToChrome.bind(this),
+      this.embeddedBrowser.contentWindow,
+      { defineAs: "sendMessageToChrome"}
+    );
+    // Let the page script know it can now send messages to JSMs,
+    // since sendMessageToChrome has been exported
+    this.embeddedBrowser.contentWindow.wrappedJSObject
+      .onChromeListening();
+    // call a method in the page script from the JSM
+    this.embeddedBrowser.contentWindow.wrappedJSObject
+      .addCustomContent("TPStudy: data can be sent to page script here.");
+  }
+
+  // This is a method my page scripts can call to pass messages to the JSM
+  sendMessageToChrome(message, data) {
+    this.handleUIEvent(message, data);
+  }
+
+  // <browser> height must be set explicitly; base it off content dimensions
+  resizeBrowser(dimensions) {
+    this.embeddedBrowser.style.width = `${ dimensions.width }px`;
+    this.embeddedBrowser.style.height = `${ dimensions.height }px`;
+  }
+
+  handleUIEvent(message, data) {
+    switch (message) {
+      case "FocusedCFR::action":
+        console.log(message);
+        break;
+      case "FocusedCFR::dismiss":
+        console.log(message);
+        break;
+      case "FocusedCFR::close":
+        console.log(message);
+        break;
+      case "FocusedCFR::openUrl":
+        console.log(message, data);
+        break;
+      case "FocusedCFR::browserResize":
+        this.resizeBrowser(JSON.parse(data));
+        break;
+      case "FocusedCFR::panelState":
+        console.log(`Panel ${data}`);
+        break;
+      default:
+        throw new Error(`UI event is not recognized, ${message}`);
+        break;
+    }
   }
 
   // These listeners are added to both the intro panel and the pageAction panel
@@ -425,7 +465,6 @@ class Feature {
     confirmationPanelBox.style.left = "0";
     confirmationPanelBox.style.top = "0";
     confirmationPanelBox.style.zIndex = "100";
-    confirmationPanelBox.style.width = "300px";
     const header = doc.createElementNS(this.XUL_NS, "label");
     header.setAttribute(
       "value",
