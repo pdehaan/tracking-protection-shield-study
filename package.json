@@ -6,14 +6,14 @@
   "addon": {
     "$ABOUT": "use these variables fill the moustache templates",
     "id": "tracking-protection-messaging@shield-study.mozilla.com",
-    "name": "Button Icon Preference Study (Shield Study Example)",
+    "name": "Tracking Protection Messaging Shield Study",
     "minVersion": "57.0",
     "maxVersion": "*",
     "multiprocessCompatible": true,
     "hasEmbeddedWebExtension": false,
     "chromeResource": "tracking-protection-messaging",
     "creator": "Bianca Danforth <bdanforth@mozilla.com>",
-    "description": "Tracking Protection Messaging Shield Study",
+    "description": "The purpose of this study is to test various types of messaging around Tracking Protection in Firefox.",
     "bugzilla": "<tbd: bug to attach for signing>",
     "iconPath": "icon.png"
   },

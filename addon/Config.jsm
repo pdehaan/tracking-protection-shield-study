@@ -28,7 +28,7 @@ var config = {
     // required keys: studyName, endings, telemetry
 
     // will be used activeExperiments tagging
-    "studyName": "buttonFeatureExperiment",
+    "studyName": "trackingProtectionMessagingExperiment",
 
     /** **endings**
       * - keys indicate the 'endStudy' even that opens these.
