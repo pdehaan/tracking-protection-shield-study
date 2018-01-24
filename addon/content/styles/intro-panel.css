@@ -1,0 +1,256 @@
+/* Reference: firefox.design.com */
+
+body {
+  margin: 0;
+  background-color: #fcfcfc;
+}
+
+#tracking-protection-study-intro-panel-box {
+  font-family: sans-serif;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-size: 15px;
+  text-align: center;
+  visibility: visible;
+}
+
+#tracking-protection-study-header {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+#tracking-protection-study-hero {
+  display: block;
+  margin-bottom: 15px;
+}
+
+#tracking-protection-study-intro-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  font-size: 12px;
+}
+
+.tracking-protection-study-button {
+  margin: 20px 0 0;
+  border-radius: 2px;
+  border-width: 0;
+  height: 32px;
+  padding-left: 8px;
+  padding-right: 8px;
+  font-size: 13px;
+  font-weight: 400;
+  width: auto;
+  cursor: pointer;
+}
+
+#tracking-protection-study-primary-button {
+  color: #fff;
+  background-color: #0060df;
+}
+
+#tracking-protection-study-primary-button:hover {
+  background-color: #003eaa;
+}
+
+#tracking-protection-study-primary-button:active {
+  background-color: #002275;
+}
+
+#tracking-protection-study-primary-button:focus {
+  box-shadow: inset 2px 2px #0a84ff, 3px 3px rgba(10, 132, 255, .3);
+}
+
+#tracking-protection-study-default-button {
+  color: #0c0c0d;
+  background-color: #e1e1e2;
+}
+
+#tracking-protection-study-default-button:hover {
+  background-color: rgba(12, 12, 13, .2);
+}
+
+#tracking-protection-study-default-button:active {
+  background-color: rgba(12, 12, 13, .3);
+}
+
+#tracking-protection-study-default-button:focus {
+    box-shadow: inset 2px 2px #0a84ff, 3px 3px rgba(10, 132, 255, .3);
+}
+
+#tracking-protection-study-secondary-button {
+  background-color: transparent;
+  color: #0060df;
+  border: 0;
+  padding-top: 10px;
+  cursor: pointer;
+}
+
+#tracking-protection-study-secondary-button:hover {
+  text-decoration: underline;
+}
+
+#tracking-protection-study-secondary-button:active {
+  color: #003eaa;
+}
+
+/* ----- CONFIRMATION SCREEN ----- */
+
+body {
+  position: relative;
+}
+
+#tracking-protection-study-confirmation-panel-box {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-size: 15px;
+  font-family: sans-serif;
+  text-align: center;
+}
+
+#tracking-protection-study-confirmation-panel-box.hidden,
+#tracking-protection-study-intro-panel-box.hidden {
+  display: none;
+}
+
+#tracking-protection-study-confirmation-header {
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+#tracking-protection-study-confirmation-hero {
+  display: block;
+  margin-bottom: 15px;
+}
+
+#tracking-protection-study-confirmation-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  font-size: 12px;
+}
+
+#tracking-protection-study-confirmation-button-group {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-gap: 10px;
+}
+
+.tracking-protection-study-default-button {
+  color: #0c0c0d;
+  background-color: #e1e1e2;
+}
+
+.tracking-protection-study-default-button:hover {
+  background-color: rgba(12, 12, 13, .2);
+}
+
+.tracking-protection-study-default-button:active {
+  background-color: rgba(12, 12, 13, .3);
+}
+
+.tracking-protection-study-default-button:focus {
+    box-shadow: inset 2px 2px #0a84ff, 3px 3px rgba(10, 132, 255, .3);
+}
+
+#tracking-protection-study-confirmation-secondary-button {
+  grid-column: 2;
+  grid-row: 1;
+  background-color: #d70022;
+  color: white;
+}
+
+#tracking-protection-study-confirmation-secondary-button:hover {
+  background-color: #a4000f;
+}
+
+#tracking-protection-study-confirmation-secondary-button:active {
+  background-color: #5a0002;
+}
+
+#tracking-protection-study-confirmation-secondary-button:focus {
+  box-shadow: inset 2px 2px #0a84ff, 3px 3px rgba(10, 132, 255, .3);
+}
+
+/* ----- PAGEACTION PANEL ---- */
+
+#tracking-protection-study-page-action-panel-box {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-family: sans-serif;
+}
+
+#tracking-protection-study-page-action-header {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+#tracking-protection-study-page-action-hero {
+  width: 30px;
+  margin-right: 15px;
+}
+
+#tracking-protection-study-page-action-title {
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.tracking-protection-study-page-action-copy {
+  font-size: 12px;
+}
+
+#tracking-protection-study-page-action-title > span {
+  display: inline-block;
+  color: #39952d;
+}
+
+#tracking-protection-study-page-action-hr {
+  color: rgba(0, 0, 0, .1);
+  margin: 5px 0;
+}
+
+#tracking-protection-study-page-action-main {
+ margin-top: 20px; 
+}
+
+#tracking-protection-study-page-action-main > div {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+#tracking-protection-study-page-action-main > div > div {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  height: 40px;
+}
+
+.tracking-protection-study-page-action-quantity {
+  color: green;
+  font-size: 32px;
+  line-height: 32px;
+}
+
+#tracking-protection-study-page-action-main p {
+  margin: 10px 0 20px;
+}
+
+#tracking-protection-study-page-action-primary-button {
+  margin: 0;
+  width: 100%;
+}

@@ -322,81 +322,135 @@ class Feature {
   * @param {String} message
   * @param {String} url
   */
-  showIntroPanel(win, message, url) {
-    // Needed to determine if panel should be dismissed due to window close
-    this.introPanelChromeWindow = win;
+  showPanel(win, message, url, isIntroPanel) {
+    if (isIntroPanel) {
+      // Needed to determine if panel should be dismissed due to window close
+      this.introPanelChromeWindow = win;
+    } else {
+      this.pageActionPanelChromeWindow = win;
+    }
     const doc = win.document;
     const pageActionButton = doc.getElementById(this.PAGE_ACTION_BUTTON_ID);
 
-    const introPanel = this.getIntroPanel(win);
-    pageActionButton.append(introPanel);
+    let panel = isIntroPanel ? this.introPanel : this.pageActionPanel;
+    if (!panel) {
+      panel = this.getPanel(win, isIntroPanel);
+    }
+    pageActionButton.append(panel);
 
-    this.state.introPanelIsShowing = true;
-    introPanel.openPopup(pageActionButton);
-
+    if (isIntroPanel) {
+      this.state.introPanelIsShowing = true;
+    } else {
+      this.state.pageActionPanelIsShowing = true;
+    }
+    panel.openPopup(pageActionButton);
   }
 
-  getIntroPanel(win) {
+  getPanel(win, isIntroPanel) {
     const doc = win.document;
-    const introPanel = doc.createElementNS(this.XUL_NS, "panel");
-    introPanel.setAttribute("id", "tracking-protection-study-intro-panel");
-    introPanel.setAttribute("type", "arrow");
-    introPanel.setAttribute("level", "parent");
-    introPanel.setAttribute("noautohide", "true");
-    this.addPanelListeners(introPanel, true);
-    introPanel.style.position = "relative";
-    const introPanelBox = doc.createElementNS(this.XUL_NS, "vbox");
-    introPanelBox.style.width = "300px";
-    const confirmationPanelBox
-      = this.getConfirmationPanelBox(doc, introPanelBox, true);
+    const browserSrc = isIntroPanel ? `resource://${STUDY}/content/intro-panel.html`
+      : `resource://${STUDY}/content/page-action-panel.html`;
+    const panel = doc.createElementNS(this.XUL_NS, "panel");
+    panel.setAttribute("id", "tracking-protection-study-intro-panel");
+    panel.setAttribute("type", "arrow");
+    panel.setAttribute("level", "parent");
+    panel.setAttribute("noautohide", "true");
+    panel.setAttribute("flip", "both");
+    panel.setAttribute("position", "bottomcenter topright");
+    this.addPanelListeners(panel, true);
+    const embeddedBrowser = doc.createElementNS(this.XUL_NS, "browser");
+    embeddedBrowser.setAttribute("id", `${STUDY}-browser`);
+    embeddedBrowser.setAttribute("src", `${browserSrc}`);
+    embeddedBrowser.setAttribute("disableglobalhistory", "true");
+    embeddedBrowser.setAttribute("type", "content");
+    embeddedBrowser.setAttribute("flex", "1");
+    panel.appendChild(embeddedBrowser);
+    this.embeddedBrowser = embeddedBrowser;
+    if (isIntroPanel) {
+      // Used to hide intro panel when tab change, window close, or location change occur
+      this.introPanel = panel;
+    } else {
+      this.pageActionPanel = panel;
+    }
+    // TODO pass strings and values into this method to show up on the panel
+    this.addBrowserContent();
+    return panel;
+  }
 
-    const header = doc.createElementNS(this.XUL_NS, "label");
-    header.setAttribute(
-      "value",
-      `Tracking Protection is awesome. Continue?`
+  addBrowserContent() {
+    this.embeddedBrowser.addEventListener(
+      "load",
+      this.handleEmbeddedBrowserLoad.bind(this),
+      // capture is required: event target is the HTML document <browser> loads
+      { capture: true }
     );
+  }
 
-    const body = doc.createElementNS(this.XUL_NS, "hbox");
+  handleEmbeddedBrowserLoad() {
+    this.log.debug("browser has loaded");
+    // about:blank loads in a <browser> before the value of its src attribute,
+    // so each embeddedBrowser actually loads twice.
+    // Make sure we are only accessing our src page
+    // accessing about:blank's contentWindow returns a dead object
+    if (!this.embeddedBrowser.contentWindow) {
+      return;
+    }
+    // enable messaging from page script to JSM
+    Cu.exportFunction(
+      this.sendMessageToChrome.bind(this),
+      this.embeddedBrowser.contentWindow,
+      { defineAs: "sendMessageToChrome"}
+    );
+    // Let the page script know it can now send messages to JSMs,
+    // since sendMessageToChrome has been exported
+    this.embeddedBrowser.contentWindow.wrappedJSObject
+      .onChromeListening();
+    // call a method in the page script from the JSM
+    this.embeddedBrowser.contentWindow.wrappedJSObject
+      .addCustomContent("test");
+  }
 
-    const yesButton = doc.createElementNS(this.XUL_NS, "button");
-    yesButton.addEventListener("command", () => {
-      this.hideIntroPanel("introduction-accept");
-    });
-    const yesButtonLabel = doc.createElementNS(this.XUL_NS, "label");
-    yesButtonLabel.setAttribute("value", "Yes");
-    yesButton.append(yesButtonLabel);
+  // This is a method my page scripts can call to pass messages to the JSM
+  sendMessageToChrome(message, data) {
+    this.handleUIEvent(message, data);
+  }
 
-    const noButton = doc.createElementNS(this.XUL_NS, "button");
-    noButton.addEventListener("command", () => {
-      this.log.debug("You clicked the 'No' button on the intro panel.");
-      this.toggleConfirmation(confirmationPanelBox, introPanelBox);
-      this.telemetry({ event: "introduction-reject" });
-    });
-    const noButtonLabel = doc.createElementNS(this.XUL_NS, "label");
-    noButtonLabel.setAttribute("value", "No");
-    noButton.append(noButtonLabel);
+  // <browser> height must be set explicitly; base it off content dimensions
+  resizeBrowser(dimensions) {
+    this.embeddedBrowser.style.width = `${ dimensions.width }px`;
+    this.embeddedBrowser.style.height = `${ dimensions.height }px`;
+  }
 
-    body.append(yesButton);
-    body.append(noButton);
-
-    introPanelBox.append(header);
-    introPanelBox.append(body);
-
-    introPanel.append(confirmationPanelBox);
-    introPanel.append(introPanelBox);
-
-    // Used to hide intro panel when tab change, window close, or location change occur
-    this.introPanel = introPanel;
-
-    return introPanel;
+  handleUIEvent(message, data) {
+    switch (message) {
+      case "introduction-accept":
+        this.hideIntroPanel(message);
+        break;
+      case "introduction-reject":
+        this.log.debug("You clicked 'Disable Protection' on the intro panel.");
+        this.telemetry({ event: message });
+        break;
+      case "introduction-confirmation-cancel":
+        this.log.debug("You clicked 'Cancel' on the intro confirmation panel.");
+        this.telemetry({ event: message });
+        break;
+      case "introduction-confirmation-leave-study":
+        this.log.debug("You clicked 'Disable' on the intro confirmation panel.");
+        this.hideIntroPanel(message);
+        this.endStudy(message);
+        break;
+      case "browser-resize":
+        this.resizeBrowser(JSON.parse(data));
+        break;
+      default:
+        throw new Error(`UI event is not recognized, ${message}`);
+    }
   }
 
   // These listeners are added to both the intro panel and the pageAction panel
   addPanelListeners(panel, isIntroPanel) {
     const panelType = isIntroPanel ? "introduction-panel" : "page-action-panel";
-    let panelShownTime,
-      panelHiddenTime,
-      panelOpenTime;
+    let panelShownTime;
 
     panel.addEventListener("popupshown", () => {
       this.log.debug(`${panelType} shown.`);
@@ -405,8 +459,8 @@ class Feature {
     });
     panel.addEventListener("popuphidden", () => {
       this.log.debug(`${panelType} hidden.`);
-      panelHiddenTime = Date.now();
-      panelOpenTime =
+      const panelHiddenTime = Date.now();
+      const panelOpenTime =
         (panelHiddenTime - panelShownTime) / 1000;
       this.log.debug(`${panelType} was open for ${Math.round(panelOpenTime)} seconds.`);
       this.telemetry({
@@ -425,7 +479,6 @@ class Feature {
     confirmationPanelBox.style.left = "0";
     confirmationPanelBox.style.top = "0";
     confirmationPanelBox.style.zIndex = "100";
-    confirmationPanelBox.style.width = "300px";
     const header = doc.createElementNS(this.XUL_NS, "label");
     header.setAttribute(
       "value",
@@ -572,11 +625,13 @@ class Feature {
       if (this.shouldShowIntroPanel
         && (uri.scheme === "http" || uri.scheme === "https")) {
         const win = Services.wm.getMostRecentWindow("navigator:browser");
+        const isIntroPanel = true;
         this.introPanelBrowser = browser;
-        this.showIntroPanel(
+        this.showPanel(
           win,
           this.introPanelMessages[this.treatment],
-          this.learnMoreUrls[this.treatment]
+          this.learnMoreUrls[this.treatment],
+          isIntroPanel
         );
         this.shouldShowIntroPanel = false;
       }
@@ -717,7 +772,6 @@ class Feature {
    * @param {number} counter - blocked count for the current page.
    */
   showPageAction(doc, counter) {
-    const pageActionPanel = this.getPageActionPanel(doc);
     const urlbar = doc.getElementById("page-action-buttons");
 
     let pageActionButton = doc.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
@@ -728,80 +782,24 @@ class Feature {
       pageActionButton.setAttribute(
         "image",
         "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled");
-      pageActionButton.append(pageActionPanel);
       pageActionButton.addEventListener("command", (evt) => {
         // Make sure the user clicked on the pageAction button, otherwise
         // once the intro panel is closed by the user clicking a button inside
         // of it, it will trigger the pageAction panel to open immediately.
         if (evt.target.tagName === "toolbarbutton"
           && !this.state.introPanelIsShowing) {
-          pageActionPanel.openPopup(pageActionButton);
+          const isIntroPanel = false;
+          this.showPanel(
+            doc.ownerGlobal,
+            this.introPanelMessages[this.treatment],
+            this.learnMoreUrls[this.treatment],
+            isIntroPanel
+          );
         }
       });
 
       urlbar.append(pageActionButton);
     }
-  }
-
-  getPageActionPanel(doc) {
-    const panel = doc.createElementNS(this.XUL_NS, "panel");
-    panel.setAttribute("id", "tracking-protection-study-panel");
-    panel.setAttribute("type", "arrow");
-    panel.setAttribute("level", "parent");
-    this.addPanelListeners(panel, false);
-    const panelBox = doc.createElementNS(this.XUL_NS, "vbox");
-    panelBox.style.width = "300px";
-    const confirmationPanelBox
-      = this.getConfirmationPanelBox(doc, panelBox, false);
-
-    const header = doc.createElementNS(this.XUL_NS, "label");
-    header.setAttribute(
-      "value",
-      `Tracking Protection enabled`
-    );
-
-    const body = doc.createElementNS(this.XUL_NS, "hbox");
-
-    const bodyLabel = doc.createElementNS(this.XUL_NS, "label");
-    const secondStatement = this.treatment === "private"
-      ? `${this.state.totalBlockedCompanies} companies blocked`
-      : `${this.state.totalTimeSaved} seconds saved`;
-    bodyLabel.setAttribute(
-      "value",
-      `${this.state.totalBlockedResources} trackers blocked
-      ${secondStatement}`
-    );
-    body.append(bodyLabel);
-
-    const footer = doc.createElementNS(this.XUL_NS, "vbox");
-    
-    const footerLabel = doc.createElementNS(this.XUL_NS, "label");
-    footerLabel.setAttribute(
-      "value",
-      "Tracking protection speeds up page loads by automatically shutting down trackers."
-    );
-    footer.append(footerLabel);
-
-    const noButton = doc.createElementNS(this.XUL_NS, "button");
-    noButton.addEventListener("command", () => {
-      this.log.debug("You clicked the 'No' button on the pageAction panel.");
-      // TODO bdanforth: show confirmation before ending study, like intro panel
-      this.telemetry({ event: "pageAction-reject" });
-      this.toggleConfirmation(confirmationPanelBox, panelBox);
-    });
-    const noButtonLabel = doc.createElementNS(this.XUL_NS, "label");
-    noButtonLabel.setAttribute("value", "Disable Protection");
-    noButton.append(noButtonLabel);
-    footer.append(noButton);
-
-    panelBox.append(header);
-    panelBox.append(body);
-    panelBox.append(footer);
-
-    panel.append(panelBox);
-    panel.append(confirmationPanelBox);
-
-    return panel;
   }
 
   setPageActionCounter(doc, counter) {
@@ -851,7 +849,7 @@ class Feature {
       if (!counter) {
         counter = 0;
       }
-      this.showPageAction(win.document, counter);
+      this.showPageAction(win, counter);
       this.setPageActionCounter(win.document, counter);
     }
   }

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Tracking Protection Messaging Study Page Action Panel</title>
+    <link
+      rel="stylesheet"
+      href="resource://tracking-protection-messaging/content/styles/page-action-panel.css" >
+  </head>
+  <body>
+    <div id="tracking-protection-study-page-action-panel-box">
+      <header id="tracking-protection-study-page-action-header">
+        <img id="tracking-protection-study-page-action-hero" src="resource://tracking-protection-messaging/content/shield-icon.png" />
+        <h1 id="tracking-protection-study-page-action-title">Tracking Protection
+        <br/>
+        <span class="tracking-protection-study-page-action-copy">Enabled</span>
+        </h1>
+      </header>
+      <hr id="tracking-protection-study-page-action-hr"/>
+      <main id="tracking-protection-study-page-action-main">
+        <div>
+          <div>
+            <span id="tracking-protection-study-page-action-num-trackers-blocked" class="tracking-protection-study-page-action-quantity">
+              34
+            </span>
+            <span class="tracking-protection-study-page-action-copy">
+              trackers<br />blocked
+            </span>
+          </div>
+          <div>
+            <span id="tracking-protection-study-page-action-num-other-quantity" class="tracking-protection-study-page-action-quantity">
+              72
+            </span>
+            <span class="tracking-protection-study-page-action-copy">
+              ads<br />blocked
+            </span>
+          </div>
+        </div>
+        <p class="tracking-protection-study-page-action-copy">
+          Tracking Protection blocks trackers automatically, so that you can browse without annoying and invasive ads.
+        </p>
+        <button class="tracking-protection-study-button tracking-protection-study-default-button" id ="tracking-protection-study-page-action-primary-button">Disable Protection</button>
+      </main>
+    </div>
+    <div id="tracking-protection-study-page-action-confirmation-panel-box" class="hidden">
+      <header id="tracking-protection-study-page-action-confirmation-header">
+        <img id="tracking-protection-study-page-action-confirmation-hero" src="resource://tracking-protection-messaging/content/shield-icon.png" />
+        <h1 id="tracking-protection-study-page-action-confirmation-title">Tracking Protection
+        </h1>
+      </header>
+      <main id="tracking-protection-study-confirmation-main">
+        <p>
+          This will globally disable tracking protection for your browser and remove the icon.
+        </p>
+        <p>
+          Are you sure you want to disable tracking protection?
+        </p>
+        <div id="tracking-protection-study-confirmation-button-group">
+          <button id="tracking-protection-study-confirmation-default-button" class="tracking-protection-study-button tracking-protection-study-default-button">Cancel</button>
+          <button id="tracking-protection-study-confirmation-secondary-button" class="tracking-protection-study-button">
+            Disable
+          </button>
+        </div>
+      </main>
+    </div>
+    <script src="resource://tracking-protection-messaging/content/scripts/page-action-panel.js"></script>
+  </body>
+</html>

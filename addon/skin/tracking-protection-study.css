@@ -15,5 +15,11 @@
   width: 16px;
 }
 
-#tracking-protection-study-panel {
+/* Reference: firefox.design.com */
+
+#tracking-protection-study-intro-panel {
+  width: 300px;
+  font-size: 100%;
+  font-family: sans-serif;
+  text-align: center;
 }
