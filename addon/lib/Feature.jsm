@@ -126,7 +126,7 @@ class Feature {
       blockedWebsites: new Set(),
       totalBlockedWebsites: 0,
       // Checked by the pageAction panel's "command" event listener to make sure
-      // the pageAction panel never opens when the intro panel is currently open
+      // the pageAction panel never opens when the intro panel is currently open among other times
       introPanelIsShowing: false,
     };
 
@@ -340,9 +340,8 @@ class Feature {
 
     if (isIntroPanel) {
       this.state.introPanelIsShowing = true;
-    } else {
-      this.state.pageActionPanelIsShowing = true;
     }
+
     panel.openPopup(pageActionButton);
   }
 
@@ -350,11 +349,17 @@ class Feature {
     const doc = win.document;
     const browserSrc = isIntroPanel ? `resource://${STUDY}/content/intro-panel.html`
       : `resource://${STUDY}/content/page-action-panel.html`;
+    // The intro panel has stickier behavior (noautohide = true), since it can be dismissed from a button in the panel itself
+    // And it only shows once and then goes away forever.
+    // As a result, I have to manually close it via panel.hidePopup on window-close, tab-change, location-change-same-tab
+    // The pageAction panel can be accessed any time by clicking the pageAction icon, and it has no button to dismiss
+    // it in the panel, so it has a behavior of noautohide = false.
+    const noAutoHide = isIntroPanel;
     const panel = doc.createElementNS(this.XUL_NS, "panel");
     panel.setAttribute("id", "tracking-protection-study-intro-panel");
     panel.setAttribute("type", "arrow");
     panel.setAttribute("level", "parent");
-    panel.setAttribute("noautohide", "true");
+    panel.setAttribute("noautohide", `${noAutoHide}`);
     panel.setAttribute("flip", "both");
     panel.setAttribute("position", "bottomcenter topright");
     this.addPanelListeners(panel, true);
@@ -387,7 +392,6 @@ class Feature {
   }
 
   handleEmbeddedBrowserLoad() {
-    this.log.debug("browser has loaded");
     // about:blank loads in a <browser> before the value of its src attribute,
     // so each embeddedBrowser actually loads twice.
     // Make sure we are only accessing our src page
@@ -424,7 +428,7 @@ class Feature {
   handleUIEvent(message, data) {
     switch (message) {
       case "introduction-accept":
-        this.hideIntroPanel(message);
+        this.hidePanel(message, true);
         break;
       case "introduction-reject":
         this.log.debug("You clicked 'Disable Protection' on the intro panel.");
@@ -436,7 +440,20 @@ class Feature {
         break;
       case "introduction-confirmation-leave-study":
         this.log.debug("You clicked 'Disable' on the intro confirmation panel.");
-        this.hideIntroPanel(message);
+        this.hidePanel(message, true);
+        this.endStudy(message);
+        break;
+      case "page-action-reject":
+        this.log.debug("You clicked 'Disable Protection' on the pageAction panel.");
+        this.telemetry({ event: message });
+        break;
+      case "page-action-confirmation-cancel":
+        this.log.debug("You clicked 'Cancel' on the pageAction confirmation panel.");
+        this.telemetry({ event: message });
+        break;
+      case "page-action-confirmation-leave-study":
+        this.log.debug("You clicked 'Disable' on the pageAction confirmation panel.");
+        this.hidePanel(message, false);
         this.endStudy(message);
         break;
       case "browser-resize":
@@ -449,15 +466,18 @@ class Feature {
 
   // These listeners are added to both the intro panel and the pageAction panel
   addPanelListeners(panel, isIntroPanel) {
-    const panelType = isIntroPanel ? "introduction-panel" : "page-action-panel";
     let panelShownTime;
 
     panel.addEventListener("popupshown", () => {
+      const panelType = (this.embeddedBrowser.src === `resource://${STUDY}/content/intro-panel.html`) ?
+        "intro-panel" : "page-action-panel";
       this.log.debug(`${panelType} shown.`);
       panelShownTime = Date.now();
       this.telemetry({ event: `${panelType}-shown` });
     });
     panel.addEventListener("popuphidden", () => {
+      const panelType = (this.embeddedBrowser.src === `resource://${STUDY}/content/intro-panel.html`) ?
+        "intro-panel" : "page-action-panel";
       this.log.debug(`${panelType} hidden.`);
       const panelHiddenTime = Date.now();
       const panelOpenTime =
@@ -468,63 +488,6 @@ class Feature {
         secondsPanelWasShowing: Math.round(panelOpenTime).toString(),
       });
     });
-  }
-
-  // Works for both intro panel and pageAction panel.
-  getConfirmationPanelBox(doc, panelBox, isIntroPanel) {
-    const panelType = isIntroPanel ? "intro-panel" : "page-action-panel";
-    const confirmationPanelBox = doc.createElementNS(this.XUL_NS, "vbox");
-    confirmationPanelBox.setAttribute("hidden", "true");
-    confirmationPanelBox.style.position = "absolute";
-    confirmationPanelBox.style.left = "0";
-    confirmationPanelBox.style.top = "0";
-    confirmationPanelBox.style.zIndex = "100";
-    const header = doc.createElementNS(this.XUL_NS, "label");
-    header.setAttribute(
-      "value",
-      `Are you sure you want to disable Tracking Protection?`
-    );
-    
-    const body = doc.createElementNS(this.XUL_NS, "hbox");
-
-    const yesButton = doc.createElementNS(this.XUL_NS, "button");
-    yesButton.addEventListener("command", () => {
-      if (isIntroPanel) {
-        this.hideIntroPanel(`${panelType}-confirmation-leave-study`);
-      }
-      this.endStudy(`${panelType}-confirmation-leave-study`);
-    });
-    const yesButtonLabel = doc.createElementNS(this.XUL_NS, "label");
-    yesButtonLabel.setAttribute("value", "Yes");
-    yesButton.append(yesButtonLabel);
-
-    const noButton = doc.createElementNS(this.XUL_NS, "button");
-    noButton.addEventListener("command", () => {
-      this.log.debug(`You clicked the 'No' button on the ${panelType} confirmation dialogue.`);
-      this.toggleConfirmation(confirmationPanelBox, panelBox);
-      this.telemetry({ event: `${panelType}-confirmation-cancel` });
-    });
-    const noButtonLabel = doc.createElementNS(this.XUL_NS, "label");
-    noButtonLabel.setAttribute("value", "No");
-    noButton.append(noButtonLabel);
-
-    body.append(yesButton);
-    body.append(noButton);
-
-    confirmationPanelBox.append(header);
-    confirmationPanelBox.append(body);
-
-    return confirmationPanelBox;
-  }
-
-  toggleConfirmation(confirmationPanelBox, panelBox) {
-    if (confirmationPanelBox.getAttribute("hidden") === "true") {
-      confirmationPanelBox.setAttribute("hidden", "false");
-      panelBox.setAttribute("hidden", "true");
-    } else {
-      confirmationPanelBox.setAttribute("hidden", "true");
-      panelBox.setAttribute("hidden", "false");
-    }
   }
 
   // @param {Object} - data, a string:string key:value object
@@ -583,7 +546,7 @@ class Feature {
 
   handleWindowClosing(win) {
     if (this.state.introPanelIsShowing && win === this.introPanelChromeWindow) {
-      this.hideIntroPanel("window-close");
+      this.hidePanel("window-close", true);
     }
   }
 
@@ -619,7 +582,7 @@ class Feature {
       
       // Hide intro panel on location change in the same tab if showing
       if (this.state.introPanelIsShowing && this.introPanelBrowser === browser) {
-        this.hideIntroPanel("location-change-same-tab");
+        this.hidePanel("location-change-same-tab", true);
       }
 
       if (this.shouldShowIntroPanel
@@ -638,12 +601,16 @@ class Feature {
     }
   }
 
-  hideIntroPanel(details) {
-    this.introPanel.hidePopup();
-    this.state.introPanelIsShowing = false;
-    this.log.debug(`Intro panel has been dismissed by user due to ${details}.`);
+  hidePanel(details, isIntroPanel) {
+    const panelType = isIntroPanel ? "introduction-panel" : "page-action-panel";
+    const panel = isIntroPanel ? this.introPanel : this.pageActionPanel;
+    panel.hidePopup();
+    if (isIntroPanel) {
+      this.state.introPanelIsShowing = false;
+    }
+    this.log.debug(`${panelType} has been dismissed by user due to ${details}.`);
     this.telemetry({
-      event: "introduction-dismissed",
+      event: `${panelType}-dismissed`,
       details,
     });
   }
@@ -828,7 +795,7 @@ class Feature {
   onTabChange(evt) {
     // Hide intro panel on tab change if showing
     if (this.state.introPanelIsShowing) {
-      this.hideIntroPanel("tab-change");
+      this.hidePanel("tab-change", true);
     }
 
     const win = evt.target.ownerGlobal;

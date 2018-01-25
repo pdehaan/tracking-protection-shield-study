@@ -7,6 +7,8 @@
 const pageActionPanel = document.getElementById("tracking-protection-study-page-action-panel-box");
 const pageActionButton = document.getElementById("tracking-protection-study-page-action-primary-button");
 const pageActionConfirmationPanel = document.getElementById("tracking-protection-study-page-action-confirmation-panel-box");
+const pageActionConfirmationCancelButton = document.getElementById("tracking-protection-study-confirmation-default-button");
+const pageActionConfirmationDisableButton = document.getElementById("tracking-protection-study-confirmation-secondary-button");
 
 function addCustomContent(data) {
   // TODO: Update strings by messaging branch.
@@ -41,8 +43,8 @@ function onChromeListening() {
   }
 
   pageActionButton.addEventListener("click", handleButtonClick);
-  // confirmationCancelButton.addEventListener("click", handleButtonClick);
-  // confirmationDisableButton.addEventListener("click", handleButtonClick);
+  pageActionConfirmationCancelButton.addEventListener("click", handleButtonClick);
+  pageActionConfirmationDisableButton.addEventListener("click", handleButtonClick);
 
   function handleButtonClick(evt) {
     let event;
@@ -54,13 +56,13 @@ function onChromeListening() {
         resizeBrowser(pageActionConfirmationPanel);
         break;
       case "tracking-protection-study-confirmation-default-button":
-        event = "introduction-confirmation-cancel";
-        confirmationPanel.classList.add("hidden");
-        introPanel.classList.remove("hidden");
-        // TODO add call to browserResize for introPanel
+        event = "page-action-confirmation-cancel";
+        pageActionConfirmationPanel.classList.add("hidden");
+        pageActionPanel.classList.remove("hidden");
+        resizeBrowser(pageActionPanel);
         break;
       case "tracking-protection-study-confirmation-secondary-button":
-        event = "introduction-confirmation-leave-study";
+        event = "page-action-confirmation-leave-study";
         break;
       default:
         throw new Error("Unrecognized UI element: ", evt.target);
