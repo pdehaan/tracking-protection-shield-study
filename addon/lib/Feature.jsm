@@ -64,7 +64,6 @@ class Feature {
     this.DOORHANGER_ID = "onboarding-trackingprotection-notification";
     this.DOORHANGER_ICON = "chrome://browser/skin/tracking-protection-16.svg#enabled";
     this.STYLESHEET_URL = `resource://${STUDY}/skin/tracking-protection-study.css`;
-    this.PREF_TP_UI_ENABLED = "privacy.trackingprotection.ui.enabled";
     this.TP_ENABLED_GLOBALLY = (this.treatment === "pseudo-control");
     this.TP_ENABLED_IN_PRIVATE_WINDOWS = (this.treatment === "control");
     this.PREF_TP_ENABLED_GLOBALLY = "privacy.trackingprotection.enabled";
@@ -78,8 +77,6 @@ class Feature {
     this.initLog(logLevel);
 
     this.addContentMessageListeners();
-
-    this.disableBuiltInTrackingProtectionUI();
 
     // define treatments as STRING: fn(browserWindow, url)
     this.TREATMENTS = {
@@ -193,10 +190,6 @@ class Feature {
       };
       return new ConsoleAPI(consoleOptions);
     });
-  }
-
-  disableBuiltInTrackingProtectionUI() {
-    Services.prefs.setBoolPref(this.PREF_TP_UI_ENABLED, false);
   }
 
   addBuiltInTrackingProtectionListeners() {
@@ -869,12 +862,6 @@ class Feature {
     Cu.unload("resource://tracking-protection-study/BlockLists.jsm");
 
     this.removeBuiltInTrackingProtectionListeners();
-
-    this.reenableBuiltInTrackingProtectionUI();
-  }
-
-  reenableBuiltInTrackingProtectionUI() {
-    Services.prefs.setBoolPref(this.PREF_TP_UI_ENABLED, true);
   }
 
   resetBuiltInTrackingProtection() {
