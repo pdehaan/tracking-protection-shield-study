@@ -6,6 +6,8 @@
 
 const ABOUT_HOME_URL = "about:home";
 const ABOUT_NEWTAB_URL = "about:newtab";
+const NEW_TAB_CONTAINER_DIV_ID = "tracking-protection-messaging-study-container";
+const NEW_TAB_MESSAGE_DIV_ID = "tracking-protection-messaging-study-message";
 
 class TrackingProtectionStudy {
   constructor(contentWindow) {
@@ -49,44 +51,33 @@ class TrackingProtectionStudy {
       message = message.replace("${minutes}", minutes.toFixed(2));
 
       // Check if the study UI has already been added to this page
-      const tpContent = doc.getElementById("tracking-protection-message");
+      const tpContent = doc.getElementById(`${NEW_TAB_CONTAINER_DIV_ID}`);
       if (tpContent) {
         // if already on the page, just update the message
-        const spanEle = tpContent.getElementsByTagName("span")[0];
+        const spanEle = tpContent.getElementsByTagName("div")[0];
         spanEle.innerHTML = message;
         return;
       }
 
-      const logo = doc.createElement("img");
-      logo.src = "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled";
-      logo.style.height = 48;
-      logo.style.width = 48;
-
-      const span = doc.createElement("span");
-      span.id = "tracking-protection-numbers";
-      span.style.fontSize = "24px";
-      span.style.fontWeight = "lighter";
-      span.style.marginLeft = "20px";
-      span.innerHTML = message;
+      const div = doc.createElement("div");
+      div.id = `${NEW_TAB_MESSAGE_DIV_ID}`;
+      div.innerHTML = message;
 
       const newContainer = doc.createElement("div");
-      newContainer.id = "tracking-protection-message";
-      newContainer.style.display = "flex";
-      newContainer.style.alignItems = "center";
-      newContainer.style.justifyContent = "flex-start";
-      newContainer.style.marginBottom = "40px";
-      newContainer.append(logo);
-      newContainer.append(span);
+      newContainer.id = `${NEW_TAB_CONTAINER_DIV_ID}`;
+      newContainer.append(div);
 
       // There's only one <main> element on the new tab page
       const mainEle = doc.getElementsByTagName("main")[0];
-      mainEle.prepend(newContainer);
+      const searchDiv = mainEle.children[0];
+      const parentNode = searchDiv.parentElement;
+      parentNode.insertBefore(newContainer, searchDiv.nextSibling);
     }
   }
 
   updateTPNumbers(state, doc) {
     const minutes = state.totalTimeSaved / 1000 / 60;
-    const span = doc.getElementById("tracking-protection-numbers");
+    const span = doc.getElementById(`${NEW_TAB_MESSAGE_DIV_ID}`);
     if (span) {
       let message = state.newTabMessage;
       message = message.replace("${blockedRequests}", state.totalBlockedResources);

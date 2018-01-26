@@ -89,8 +89,8 @@ class Feature {
 
     // TODO bdanforth: update newtab messages copy
     this.newTabMessages = {
-      fast: "Firefox blocked ${blockedRequests} trackers today<br/> and saved you ${minutes} minutes",
-      private: "Firefox blocked ${blockedRequests} trackers today<br/> from ${blockedCompanies} companies that track your browsing",
+      fast: "Firefox blocked <span class='tracking-protection-messaging-study-message-quantity'>${blockedRequests}</span> trackers today and saved you <span class='tracking-protection-messaging-study-message-quantity'>${minutes}</span> minutes.",
+      private: "Firefox blocked <span class='tracking-protection-messaging-study-message-quantity'>${blockedRequests}</span> trackers today from <span class='tracking-protection-messaging-study-message-quantity'>${blockedCompanies}</span> companies that track your browsing.",
     };
     // TODO bdanforth: update with final URLs
     this.learnMoreUrls = {
