@@ -41,9 +41,8 @@ class TrackingProtectionStudy {
 
   addContentToNewTab(state, doc) {
     const minutes = state.totalTimeSaved / 1000 / 60;
-    // FIXME commented out for testing
     // if we haven't blocked anything yet, don't modify the page
-    if (true /* state.totalBlockedResources && minutes >= 1 */) {
+    if (state.totalBlockedResources) {
       let message = state.newTabMessage;
       message = message.replace("${blockedRequests}", state.totalBlockedResources);
       message = message.replace("${blockedCompanies}", state.totalBlockedCompanies);
