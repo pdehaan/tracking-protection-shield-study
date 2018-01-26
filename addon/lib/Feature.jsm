@@ -564,6 +564,11 @@ class Feature {
   // Not appropriate for modifying the page itself because the page hasn't
   // finished loading yet. More info: https://tinyurl.com/lpzfbpj
   onLocationChange(browser, progress, request, uri, flags) {
+    // only show pageAction icon and panels on http(s) pages
+    if (uri.scheme !== "http" && uri.scheme !== "https") {
+      return;
+    }
+
     const LOCATION_CHANGE_SAME_DOCUMENT = 1;
     // ensure the location change event is occuring in the top frame (not an
     // iframe for example) and also that a different page is being loaded
@@ -572,14 +577,13 @@ class Feature {
       this.setPageActionCounter(browser.getRootNode(), 0);
       this.state.blockedResources.set(browser, 0);
       this.state.timeSaved.set(browser, 0);
-      
+
       // Hide intro panel on location change in the same tab if showing
       if (this.state.introPanelIsShowing && this.introPanelBrowser === browser) {
         this.hidePanel("location-change-same-tab", true);
       }
 
-      if (this.shouldShowIntroPanel
-        && (uri.scheme === "http" || uri.scheme === "https")) {
+      if (this.shouldShowIntroPanel) {
         const win = Services.wm.getMostRecentWindow("navigator:browser");
         const isIntroPanel = true;
         this.introPanelBrowser = browser;
@@ -733,8 +737,10 @@ class Feature {
    */
   showPageAction(doc, counter) {
     const urlbar = doc.getElementById("page-action-buttons");
+    const win = doc.ownerGlobal;
 
     let pageActionButton = doc.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
+    
     if (!pageActionButton) {
       pageActionButton = doc.createElementNS(this.XUL_NS, "toolbarbutton");
       pageActionButton.style.backgroundColor = "green";
@@ -750,7 +756,7 @@ class Feature {
           && !this.state.introPanelIsShowing) {
           const isIntroPanel = false;
           this.showPanel(
-            doc.ownerGlobal,
+            win,
             this.introPanelMessages[this.treatment],
             this.learnMoreUrls[this.treatment],
             isIntroPanel
@@ -792,8 +798,13 @@ class Feature {
     }
 
     const win = evt.target.ownerGlobal;
-    // TODO bdanforth: use currentURI to hide pageAction icon when not at an http or https site 
     const currentURI = win.gBrowser.currentURI;
+
+    // Only show pageAction on http(s) pages
+    if (currentURI.scheme !== "http" && currentURI.scheme !== "https") {
+      this.hidePageAction(win.document);
+      return;
+    }
 
     const currentWin = Services.wm.getMostRecentWindow("navigator:browser");
 
@@ -809,7 +820,7 @@ class Feature {
       if (!counter) {
         counter = 0;
       }
-      this.showPageAction(win, counter);
+      this.showPageAction(win.document, counter);
       this.setPageActionCounter(win.document, counter);
     }
   }
