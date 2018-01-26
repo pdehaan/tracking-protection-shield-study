@@ -582,19 +582,10 @@ class Feature {
       if (this.state.introPanelIsShowing && this.introPanelBrowser === browser) {
         this.hidePanel("location-change-same-tab", true);
       }
+    }
 
-      if (this.shouldShowIntroPanel) {
-        const win = Services.wm.getMostRecentWindow("navigator:browser");
-        const isIntroPanel = true;
-        this.introPanelBrowser = browser;
-        this.showPanel(
-          win,
-          this.introPanelMessages[this.treatment],
-          this.learnMoreUrls[this.treatment],
-          isIntroPanel
-        );
-        this.shouldShowIntroPanel = false;
-      }
+    if (this.shouldShowIntroPanel) {
+      this.introPanelBrowser = browser;
     }
   }
 
@@ -769,6 +760,17 @@ class Feature {
   }
 
   setPageActionCounter(doc, counter) {
+    if (this.shouldShowIntroPanel && counter > 0) {
+      const win = Services.wm.getMostRecentWindow("navigator:browser");
+      const isIntroPanel = true;
+      this.showPanel(
+        win,
+        this.introPanelMessages[this.treatment],
+        this.learnMoreUrls[this.treatment],
+        isIntroPanel
+      );
+      this.shouldShowIntroPanel = false;
+    }
     const toolbarButton = doc.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
     if (toolbarButton) {
       // if "fast" treatment, convert counter from ms to seconds and add unit "s"
