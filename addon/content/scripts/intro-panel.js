@@ -2,7 +2,14 @@
 
 /* global sendMessageToChrome */
 
-/* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(onChromeListening)" }]*/
+/* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(onChromeListening|updateTPNumbers)" }]*/
+
+// Dummy function to prevent error messages, since the same <browser>
+// is used for the intro panel and pageAction panel page.
+// Only the pageAction has content (TPNumbers) that needs to be updated
+function updateTPNumbers(state) {
+
+}
 
 function onChromeListening(copy) {
   const introPanel = document.getElementById("tracking-protection-study-intro-panel-box");

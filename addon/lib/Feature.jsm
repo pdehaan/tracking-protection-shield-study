@@ -99,10 +99,20 @@ class Feature {
       private: "Freedom from Ads and Trackers with Tracking Protection",
     };
 
-    // TODO bdanforth: update intro panel message copy
     this.introPanelMessages = {
       fast: "Firefox is the only major browser with Tracking Protection to speed up page loads by automatically shutting trackers down.",
       private: "Only Firefox's built-in Tracking Protection blocks ads and trackers that can get in the way of your browsing, leaving you free to browse without interruption and without being watched.",
+    };
+
+    this.pageActionPanelQuantities = {
+      // both branches show one quantity as # blocked resources in addition to one variable quantity
+      fast: '<span id="tracking-protection-study-page-action-num-other-quantity" class="tracking-protection-study-page-action-quantity">${timeSaved}</span><span class="tracking-protection-study-page-action-copy">seconds<br />saved</span>',
+      private: '<span id="tracking-protection-study-page-action-num-other-quantity" class="tracking-protection-study-page-action-quantity">${blockedAds}</span><span class="tracking-protection-study-page-action-copy">ads<br />blocked</span>',
+    };
+
+    this.pageActionPanelMessages = {
+      fast: "Tracking Protection speeds up page loads by automatically shutting down trackers.",
+      private: "Tracking Protection blocks trackers automatically, so that you can browse without annoying and invasive ads.",
     };
 
     // run once now on the most recent window.
@@ -170,6 +180,10 @@ class Feature {
         if (this.treatment === "fast") {
           this.showPageAction(browser.getRootNode(), counter);
           this.setPageActionCounter(browser.getRootNode(), counter);
+          if (this.embeddedBrowser) {
+            this.embeddedBrowser.contentWindow.wrappedJSObject
+              .updateTPNumbers(JSON.stringify(this.state));
+          }
         }
         break;
       default:
@@ -405,6 +419,9 @@ class Feature {
       .onChromeListening(JSON.stringify({
         introHeader: this.introPanelHeaders[this.treatment],
         introMessage: this.introPanelMessages[this.treatment],
+        pageActionQuantities: this.pageActionPanelQuantities[this.treatment],
+        pageActionMessage: this.pageActionPanelMessages[this.treatment],
+        state: this.state,
       }));
   }
 
@@ -652,7 +669,10 @@ class Feature {
           type: "updateTPNumbers",
           state: this.state,
         });
-
+        if (this.embeddedBrowser) {
+          this.embeddedBrowser.contentWindow.wrappedJSObject
+            .updateTPNumbers(JSON.stringify(this.state));
+        }
         const rootDomainHost = this.getRootDomain(host);
         const rootDomainCurrentHost = this.getRootDomain(currentHost);
 
