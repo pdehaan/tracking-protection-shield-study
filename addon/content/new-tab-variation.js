@@ -45,7 +45,7 @@ class TrackingProtectionStudy {
     if (state.totalBlockedResources) {
       let message = state.newTabMessage;
       message = message.replace("${blockedRequests}", state.totalBlockedResources);
-      message = message.replace("${blockedCompanies}", state.totalBlockedCompanies);
+      message = message.replace("${blockedAds}", state.totalBlockedAds);
       message = message.replace("${blockedSites}", state.totalBlockedWebsites);
       message = message.replace("${minutes}", minutes.toFixed(2));
 
@@ -80,7 +80,7 @@ class TrackingProtectionStudy {
     if (span) {
       let message = state.newTabMessage;
       message = message.replace("${blockedRequests}", state.totalBlockedResources);
-      message = message.replace("${blockedCompanies}", state.totalBlockedCompanies);
+      message = message.replace("${blockedAds}", state.totalBlockedAds);
       message = message.replace("${blockedSites}", state.totalBlockedWebsites);
       message = message.replace("${minutes}", minutes.toFixed(2));
       span.innerHTML = message;

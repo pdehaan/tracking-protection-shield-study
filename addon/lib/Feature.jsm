@@ -69,6 +69,8 @@ class Feature {
     this.PREF_TP_ENABLED_GLOBALLY = "privacy.trackingprotection.enabled";
     this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS = "privacy.trackingprotection.pbmode.enabled";
     this.PAGE_ACTION_BUTTON_ID = "tracking-protection-study-button";
+    // Estimating # blocked ads as a percentage of # blocked resources
+    this.AD_FRACTION = 0.1;
     this.init(logLevel);
   }
 
@@ -87,21 +89,20 @@ class Feature {
       "private": this.applyExperimentalTreatment.bind(this),
     };
 
-    // TODO bdanforth: update newtab messages copy
     this.newTabMessages = {
-      fast: "Firefox blocked <span class='tracking-protection-messaging-study-message-quantity'>${blockedRequests}</span> trackers today and saved you <span class='tracking-protection-messaging-study-message-quantity'>${minutes}</span> minutes.",
-      private: "Firefox blocked <span class='tracking-protection-messaging-study-message-quantity'>${blockedRequests}</span> trackers today from <span class='tracking-protection-messaging-study-message-quantity'>${blockedCompanies}</span> companies that track your browsing.",
+      fast: "Firefox blocked <span class='tracking-protection-messaging-study-message-quantity'>${blockedRequests}</span> trackers and saved you <span class='tracking-protection-messaging-study-message-quantity'>${minutes}</span> minutes",
+      private: "Firefox blocked <span class='tracking-protection-messaging-study-message-quantity'>${blockedRequests}</span> trackers and <span class='tracking-protection-messaging-study-message-quantity'>${blockedAds}</span> advertisements",
     };
-    // TODO bdanforth: update with final URLs
-    this.learnMoreUrls = {
-      fast: "http://www.mozilla.com",
-      private: "http://www.mozilla.com",
+
+    this.introPanelHeaders = {
+      fast: "Freedom to browse faster with Tracking Protection",
+      private: "Freedom from Ads and Trackers with Tracking Protection",
     };
 
     // TODO bdanforth: update intro panel message copy
     this.introPanelMessages = {
-      fast: "Tracking protection is great! Would you like to participate in a study?",
-      private: "Tracking protection is great! Would you like to participate in a study?",
+      fast: "Firefox is the only major browser with Tracking Protection to speed up page loads by automatically shutting trackers down.",
+      private: "Only Firefox's built-in Tracking Protection blocks ads and trackers that can get in the way of your browsing, leaving you free to browse without interruption and without being watched.",
     };
 
     // run once now on the most recent window.
@@ -118,8 +119,8 @@ class Feature {
       // if didn't do this, you might get two tabs loading the same page trying to update the same counter.
       blockedResources: new Map(),
       totalBlockedResources: 0,
-      blockedCompanies: new Set(),
-      totalBlockedCompanies: 0,
+      blockedAds: new Map(),
+      totalBlockedAds: 0,
       blockedWebsites: new Set(),
       totalBlockedWebsites: 0,
       // Checked by the pageAction panel's "command" event listener to make sure
@@ -315,7 +316,7 @@ class Feature {
   * @param {String} message
   * @param {String} url
   */
-  showPanel(win, message, url, isIntroPanel) {
+  showPanel(win, message, isIntroPanel) {
     if (isIntroPanel) {
       // Needed to determine if panel should be dismissed due to window close
       this.introPanelChromeWindow = win;
@@ -401,10 +402,10 @@ class Feature {
     // Let the page script know it can now send messages to JSMs,
     // since sendMessageToChrome has been exported
     this.embeddedBrowser.contentWindow.wrappedJSObject
-      .onChromeListening();
-    // call a method in the page script from the JSM
-    this.embeddedBrowser.contentWindow.wrappedJSObject
-      .addCustomContent("test");
+      .onChromeListening(JSON.stringify({
+        introHeader: this.introPanelHeaders[this.treatment],
+        introMessage: this.introPanelMessages[this.treatment],
+      }));
   }
 
   // This is a method my page scripts can call to pass messages to the JSM
@@ -576,6 +577,7 @@ class Feature {
       this.showPageAction(browser.getRootNode(), 0);
       this.setPageActionCounter(browser.getRootNode(), 0);
       this.state.blockedResources.set(browser, 0);
+      this.state.blockedAds.set(browser, 0);
       this.state.timeSaved.set(browser, 0);
 
       // Hide intro panel on location change in the same tab if showing
@@ -645,6 +647,7 @@ class Feature {
         }
         counter++;
         this.state.totalBlockedResources += 1;
+        this.state.totalBlockedAds = Math.round(this.AD_FRACTION * this.state.totalBlockedResources);
         Services.mm.broadcastAsyncMessage("TrackingStudy:Totals", {
           type: "updateTPNumbers",
           state: this.state,
@@ -665,17 +668,10 @@ class Feature {
             // and owned by "entity" but we have to check and see if the
             // "currentHost" is also owned by "entity"
             // if it is, don't block the request; if it isn't, block the request
-            // and add the entity to the list of "blockedCompanies" 
             if (resources.includes(rootDomainCurrentHost)
               || properties.includes(rootDomainCurrentHost)) {
               return {};
             }
-            this.state.blockedCompanies.add(entity);
-            this.state.totalBlockedCompanies = this.state.blockedCompanies.size;
-            Services.mm.broadcastAsyncMessage("TrackingStudy:Totals", {
-              type: "updateTPNumbers",
-              state: this.state,
-            });
           }
         }
 
@@ -688,6 +684,7 @@ class Feature {
         }
 
         this.state.blockedResources.set(details.browser, counter);
+        this.state.blockedAds.set(details.browser, Math.round(this.AD_FRACTION * counter));
 
         const enumerator = Services.wm.getEnumerator("navigator:browser");
         while (enumerator.hasMoreElements()) {
@@ -749,7 +746,6 @@ class Feature {
           this.showPanel(
             win,
             this.introPanelMessages[this.treatment],
-            this.learnMoreUrls[this.treatment],
             isIntroPanel
           );
         }
@@ -766,7 +762,6 @@ class Feature {
       this.showPanel(
         win,
         this.introPanelMessages[this.treatment],
-        this.learnMoreUrls[this.treatment],
         isIntroPanel
       );
       this.shouldShowIntroPanel = false;
