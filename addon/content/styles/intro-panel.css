@@ -28,6 +28,11 @@ body {
   margin-bottom: 15px;
 }
 
+#tracking-protection-study-heading {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
 #tracking-protection-study-intro-main {
   display: flex;
   flex-direction: column;

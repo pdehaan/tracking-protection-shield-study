@@ -2,20 +2,20 @@
 
 /* global sendMessageToChrome */
 
-/* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(addCustomContent|onChromeListening|showPageActionPanel)" }]*/
+/* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(onChromeListening|updateTPNumbers)" }]*/
 
 const pageActionPanel = document.getElementById("tracking-protection-study-page-action-panel-box");
 const pageActionButton = document.getElementById("tracking-protection-study-page-action-primary-button");
 const pageActionConfirmationPanel = document.getElementById("tracking-protection-study-page-action-confirmation-panel-box");
 const pageActionConfirmationCancelButton = document.getElementById("tracking-protection-study-confirmation-default-button");
 const pageActionConfirmationDisableButton = document.getElementById("tracking-protection-study-confirmation-secondary-button");
+const pageActionFirstQuantity = document.getElementById("tracking-protection-study-page-action-num-trackers-blocked");
+const pageActionSecondQuantity = document.getElementById("tracking-protection-study-page-action-second-quantity");
+const pageActionMessage = document.getElementById("tracking-protection-study-page-action-message");
+let msgParsed;
 
-function addCustomContent(data) {
-  // TODO: Update strings by messaging branch.
-  console.log(data);
-}
-
-function onChromeListening() {
+function onChromeListening(msg) {
+  msgParsed = JSON.parse(msg);
 
   if (document.readyState === "complete") {
     handleLoad();
@@ -24,7 +24,19 @@ function onChromeListening() {
   }
 
   function handleLoad() {
+    addCustomContent();
     resizeBrowser(pageActionPanel);
+  }
+
+  // This is only called when the pageAction panel goes from not showing to showing
+  // it does not live update the values
+  function addCustomContent() {
+    pageActionFirstQuantity.innerText = msgParsed.firstQuantity;
+    let secondQuantityMessage = msgParsed.pageActionQuantities;
+    secondQuantityMessage = secondQuantityMessage.replace("${blockedAds}", msgParsed.secondQuantity);
+    secondQuantityMessage = secondQuantityMessage.replace("${timeSaved}", Math.round(msgParsed.secondQuantity / 1000));
+    pageActionSecondQuantity.innerHTML = secondQuantityMessage;
+    pageActionMessage.textContent = msgParsed.pageActionMessage;
   }
 
   function resizeBrowser(panel) {
@@ -69,4 +81,19 @@ function onChromeListening() {
     }
     sendMessageToChrome(event);
   }
+}
+
+// Update quantities dynamically without refreshing the pageAction panel
+function updateTPNumbers(quantities) {
+  quantities = JSON.parse(quantities);
+  const treatment = quantities.treatment;
+  const firstQuantity = quantities.firstQuantity;
+  const secondQuantity = treatment === "fast"
+    ? Math.round(quantities.secondQuantity / 1000)
+    : quantities.secondQuantity;
+  pageActionFirstQuantity.innerText = firstQuantity;
+  let secondQuantityHTML = msgParsed.pageActionQuantities;
+  secondQuantityHTML = secondQuantityHTML.replace("${blockedAds}", secondQuantity);
+  secondQuantityHTML = secondQuantityHTML.replace("${timeSaved}", secondQuantity);
+  pageActionSecondQuantity.innerHTML = secondQuantityHTML;
 }

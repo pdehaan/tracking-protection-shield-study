@@ -64,15 +64,17 @@ body {
 }
 
 #tracking-protection-study-page-action-main > div > div {
-  display: grid;
-  grid-template-columns: 1fr 2fr;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
   height: 40px;
 }
 
 .tracking-protection-study-page-action-quantity {
-  color: green;
+  color: #058b00;
   font-size: 32px;
   line-height: 32px;
+  margin-right: 5px;
 }
 
 #tracking-protection-study-page-action-main p {
