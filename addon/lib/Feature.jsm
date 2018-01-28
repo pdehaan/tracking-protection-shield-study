@@ -339,6 +339,10 @@ class Feature {
   * @param {String} url
   */
   showPanel(win, message, isIntroPanel) {
+    // don't show the pageAction panel before the intro panel has been shown
+    if (this.shouldShowIntroPanel && !this.introPanelIsShowing && !isIntroPanel) {
+      return;
+    }
     if (isIntroPanel) {
       // Needed to determine if panel should be dismissed due to window close
       this.introPanelChromeWindow = win;
