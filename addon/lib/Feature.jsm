@@ -90,7 +90,7 @@ class Feature {
     };
 
     this.newTabMessages = {
-      fast: "Firefox blocked <span class='tracking-protection-messaging-study-message-quantity'>${blockedRequests}</span> trackers and saved you <span class='tracking-protection-messaging-study-message-quantity'>${minutes}</span> minutes",
+      fast: "Firefox blocked <span class='tracking-protection-messaging-study-message-quantity'>${blockedRequests}</span> trackers and saved you <span class='tracking-protection-messaging-study-message-quantity'>${seconds}</span> seconds",
       private: "Firefox blocked <span class='tracking-protection-messaging-study-message-quantity'>${blockedRequests}</span> trackers and <span class='tracking-protection-messaging-study-message-quantity'>${blockedAds}</span> advertisements",
     };
 
@@ -131,11 +131,11 @@ class Feature {
       totalBlockedResources: 0,
       blockedAds: new Map(),
       totalBlockedAds: 0,
-      blockedWebsites: new Set(),
-      totalBlockedWebsites: 0,
       // Checked by the pageAction panel's "command" event listener to make sure
       // the pageAction panel never opens when the intro panel is currently open among other times
       introPanelIsShowing: false,
+      // Only update the values in the pageAction panel if it's showing
+      pageActionPanelIsShowing: false,
     };
 
     if (this.treatment in this.TREATMENTS) {
@@ -178,11 +178,19 @@ class Feature {
         this.state.totalTimeSaved += counter;
         this.state.timeSaved.set(browser, counter);
         if (this.treatment === "fast") {
-          this.showPageAction(browser.getRootNode(), counter);
+          this.showPageAction(browser.getRootNode());
           this.setPageActionCounter(browser.getRootNode(), counter);
-          if (this.embeddedBrowser) {
+          // if the pageAction panel is showing, live update quantities
+          if (this.pageActionPanelIsShowing) {
+            // blocked resources is always the first quantity
+            const firstQuantity = this.state.blockedResources.get(browser);
+            const secondQuantity = counter;
             this.embeddedBrowser.contentWindow.wrappedJSObject
-              .updateTPNumbers(JSON.stringify(this.state));
+              .updateTPNumbers(JSON.stringify({
+                treatment: this.treatment,
+                firstQuantity,
+                secondQuantity,
+              }));
           }
         }
         break;
@@ -346,31 +354,31 @@ class Feature {
     }
     pageActionButton.append(panel);
 
-    if (isIntroPanel) {
-      this.state.introPanelIsShowing = true;
-    }
-
     panel.openPopup(pageActionButton);
+
+    if (!isIntroPanel) {
+      // if the user clicks off the panel, hide it
+      this.pageActionPanelChromeWindow.addEventListener("click", (evt) => {
+        if (evt.target.ownerDocument.URL !== `resource://${STUDY}/content/page-action-panel.html`
+          && evt.target !== pageActionButton) {
+          this.hidePanel("user-clicked-off-panel", false);
+        }
+      });
+    }
   }
 
   getPanel(win, isIntroPanel) {
     const doc = win.document;
     const browserSrc = isIntroPanel ? `resource://${STUDY}/content/intro-panel.html`
       : `resource://${STUDY}/content/page-action-panel.html`;
-    // The intro panel has stickier behavior (noautohide = true), since it can be dismissed from a button in the panel itself
-    // And it only shows once and then goes away forever.
-    // As a result, I have to manually close it via panel.hidePopup on window-close, tab-change, location-change-same-tab
-    // The pageAction panel can be accessed any time by clicking the pageAction icon, and it has no button to dismiss
-    // it in the panel, so it has a behavior of noautohide = false.
-    const noAutoHide = isIntroPanel;
     const panel = doc.createElementNS(this.XUL_NS, "panel");
     panel.setAttribute("id", "tracking-protection-study-intro-panel");
     panel.setAttribute("type", "arrow");
     panel.setAttribute("level", "parent");
-    panel.setAttribute("noautohide", `${noAutoHide}`);
+    panel.setAttribute("noautohide", "true");
     panel.setAttribute("flip", "both");
     panel.setAttribute("position", "bottomcenter topright");
-    this.addPanelListeners(panel, true);
+    this.addPanelListeners(panel);
     const embeddedBrowser = doc.createElementNS(this.XUL_NS, "browser");
     embeddedBrowser.setAttribute("id", `${STUDY}-browser`);
     embeddedBrowser.setAttribute("src", `${browserSrc}`);
@@ -413,6 +421,19 @@ class Feature {
       this.embeddedBrowser.contentWindow,
       { defineAs: "sendMessageToChrome"}
     );
+    // Get the quantities for the pageAction panel for the current page
+    const win = Services.wm.getMostRecentWindow("navigator:browser");
+    if (win.gBrowser.selectedBrowser) {
+      const browser = win.gBrowser.selectedBrowser;
+      this.updateQuantities(browser);
+    }
+  }
+
+  updateQuantities(browser) {
+    const firstQuantity = this.state.blockedResources.get(browser);
+    const secondQuantity = this.treatment === "fast"
+      ? this.state.timeSaved.get(browser)
+      : this.state.blockedAds.get(browser);
     // Let the page script know it can now send messages to JSMs,
     // since sendMessageToChrome has been exported
     this.embeddedBrowser.contentWindow.wrappedJSObject
@@ -421,7 +442,8 @@ class Feature {
         introMessage: this.introPanelMessages[this.treatment],
         pageActionQuantities: this.pageActionPanelQuantities[this.treatment],
         pageActionMessage: this.pageActionPanelMessages[this.treatment],
-        state: this.state,
+        firstQuantity,
+        secondQuantity,
       }));
   }
 
@@ -476,19 +498,29 @@ class Feature {
   }
 
   // These listeners are added to both the intro panel and the pageAction panel
-  addPanelListeners(panel, isIntroPanel) {
+  addPanelListeners(panel) {
     let panelShownTime;
-
     panel.addEventListener("popupshown", () => {
       const panelType = (this.embeddedBrowser.src === `resource://${STUDY}/content/intro-panel.html`) ?
         "intro-panel" : "page-action-panel";
+      if (panelType === "intro-panel") {
+        this.state.introPanelIsShowing = true;
+      } else {
+        this.state.pageActionPanelIsShowing = true;
+      }
       this.log.debug(`${panelType} shown.`);
       panelShownTime = Date.now();
       this.telemetry({ event: `${panelType}-shown` });
     });
+
     panel.addEventListener("popuphidden", () => {
       const panelType = (this.embeddedBrowser.src === `resource://${STUDY}/content/intro-panel.html`) ?
         "intro-panel" : "page-action-panel";
+      if (panelType === "intro-panel") {
+        this.state.introPanelIsShowing = false;
+      } else {
+        this.state.pageActionPanelIsShowing = false;
+      }
       this.log.debug(`${panelType} hidden.`);
       const panelHiddenTime = Date.now();
       const panelOpenTime =
@@ -559,6 +591,9 @@ class Feature {
     if (this.state.introPanelIsShowing && win === this.introPanelChromeWindow) {
       this.hidePanel("window-close", true);
     }
+    if (this.state.pageActionPanelIsShowing && win === this.pageActionPanelChromeWindow) {
+      this.hidePanel("window-close", false);
+    }
   }
 
   // This method is called if event occurs from:
@@ -591,7 +626,7 @@ class Feature {
     // ensure the location change event is occuring in the top frame (not an
     // iframe for example) and also that a different page is being loaded
     if (progress.isTopLevel && flags !== LOCATION_CHANGE_SAME_DOCUMENT) {
-      this.showPageAction(browser.getRootNode(), 0);
+      this.showPageAction(browser.getRootNode());
       this.setPageActionCounter(browser.getRootNode(), 0);
       this.state.blockedResources.set(browser, 0);
       this.state.blockedAds.set(browser, 0);
@@ -600,6 +635,9 @@ class Feature {
       // Hide intro panel on location change in the same tab if showing
       if (this.state.introPanelIsShowing && this.introPanelBrowser === browser) {
         this.hidePanel("location-change-same-tab", true);
+      }
+      if (this.state.pageActionPanelIsShowing) {
+        this.hidePanel("location-change-same-tab", false);
       }
     }
 
@@ -612,8 +650,12 @@ class Feature {
     const panelType = isIntroPanel ? "introduction-panel" : "page-action-panel";
     const panel = isIntroPanel ? this.introPanel : this.pageActionPanel;
     panel.hidePopup();
-    if (isIntroPanel) {
-      this.state.introPanelIsShowing = false;
+    if (!isIntroPanel) {
+      this.pageActionPanelChromeWindow.removeEventListener("click", (evt) => {
+        if (evt.target !== panel) {
+          this.hidePanel("user-clicked-off-panel", false);
+        }
+      });
     }
     this.log.debug(`${panelType} has been dismissed by user due to ${details}.`);
     this.telemetry({
@@ -662,17 +704,7 @@ class Feature {
         if (this.state.blockedResources.has(details.browser)) {
           counter = this.state.blockedResources.get(details.browser);
         }
-        counter++;
-        this.state.totalBlockedResources += 1;
-        this.state.totalBlockedAds = Math.round(this.AD_FRACTION * this.state.totalBlockedResources);
-        Services.mm.broadcastAsyncMessage("TrackingStudy:Totals", {
-          type: "updateTPNumbers",
-          state: this.state,
-        });
-        if (this.embeddedBrowser) {
-          this.embeddedBrowser.contentWindow.wrappedJSObject
-            .updateTPNumbers(JSON.stringify(this.state));
-        }
+
         const rootDomainHost = this.getRootDomain(host);
         const rootDomainCurrentHost = this.getRootDomain(currentHost);
 
@@ -695,16 +727,30 @@ class Feature {
           }
         }
 
-        // If we get this far, we're going to block the request.
-
-        // Add host to blockedWebsites if not already present
-        if (!this.state.blockedWebsites.has(host)) {
-          this.state.blockedWebsites.add(host);
-          this.state.totalBlockedWebsites = this.state.blockedWebsites.size;
-        }
-
+        // If we get this far, we're going to block the request
+        counter++;
         this.state.blockedResources.set(details.browser, counter);
-        this.state.blockedAds.set(details.browser, Math.round(this.AD_FRACTION * counter));
+        this.state.blockedAds.set(details.browser, Math.floor(this.AD_FRACTION * counter));
+
+        this.state.totalBlockedResources += 1;
+        this.state.totalBlockedAds = Math.floor(this.AD_FRACTION * this.state.totalBlockedResources);
+        Services.mm.broadcastAsyncMessage("TrackingStudy:Totals", {
+          type: "updateTPNumbers",
+          state: this.state,
+        });
+        // If the pageAction panel is showing, update the quantities dynamically
+        if (this.state.pageActionPanelIsShowing) {
+          const firstQuantity = counter;
+          const secondQuantity = this.treatment === "fast"
+            ? this.state.timeSaved.get(details.browser)
+            : this.state.blockedAds.get(details.browser);
+          this.embeddedBrowser.contentWindow.wrappedJSObject
+            .updateTPNumbers(JSON.stringify({
+              treatment: this.treatment,
+              firstQuantity,
+              secondQuantity,
+            }));
+        }
 
         const enumerator = Services.wm.getEnumerator("navigator:browser");
         while (enumerator.hasMoreElements()) {
@@ -720,7 +766,7 @@ class Feature {
           // for the "fast" treatment branch
           if (details.browser === win.gBrowser.selectedBrowser
             && this.treatment === "private") {
-            this.showPageAction(browser.getRootNode(), counter);
+            this.showPageAction(browser.getRootNode());
             this.setPageActionCounter(browser.getRootNode(), counter);
           }
         }
@@ -741,14 +787,13 @@ class Feature {
    * Shows the page action button.
    *
    * @param {document} doc - the browser.xul document for the page action.
-   * @param {number} counter - blocked count for the current page.
    */
-  showPageAction(doc, counter) {
+  showPageAction(doc) {
     const urlbar = doc.getElementById("page-action-buttons");
     const win = doc.ownerGlobal;
 
     let pageActionButton = doc.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
-    
+
     if (!pageActionButton) {
       pageActionButton = doc.createElementNS(this.XUL_NS, "toolbarbutton");
       pageActionButton.style.backgroundColor = "green";
@@ -762,12 +807,16 @@ class Feature {
         // of it, it will trigger the pageAction panel to open immediately.
         if (evt.target.tagName === "toolbarbutton"
           && !this.state.introPanelIsShowing) {
-          const isIntroPanel = false;
-          this.showPanel(
-            win,
-            this.introPanelMessages[this.treatment],
-            isIntroPanel
-          );
+          if (!this.state.pageActionPanelIsShowing) {
+            const isIntroPanel = false;
+            this.showPanel(
+              win,
+              this.introPanelMessages[this.treatment],
+              isIntroPanel
+            );
+          } else {
+            this.hidePanel("page-action-click", false);
+          }
         }
       });
 
@@ -814,6 +863,10 @@ class Feature {
       this.hidePanel("tab-change", true);
     }
 
+    if (this.state.pageActionPanelIsShowing) {
+      this.hidePanel("tab-change", false);
+    }
+
     const win = evt.target.ownerGlobal;
     const currentURI = win.gBrowser.currentURI;
 
@@ -837,7 +890,7 @@ class Feature {
       if (!counter) {
         counter = 0;
       }
-      this.showPageAction(win.document, counter);
+      this.showPageAction(win.document);
       this.setPageActionCounter(win.document, counter);
     }
   }

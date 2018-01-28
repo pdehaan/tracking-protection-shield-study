@@ -31,13 +31,11 @@ function onChromeListening(msg) {
   // This is only called when the pageAction panel goes from not showing to showing
   // it does not live update the values
   function addCustomContent() {
-    // get timeSaved to seconds
-    const timeSaved = Math.round(msgParsed.state.totalTimeSaved / 1000);
-    pageActionFirstQuantity.innerText = msgParsed.state.totalBlockedResources;
-    let secondQuantity = msgParsed.pageActionQuantities;
-    secondQuantity = secondQuantity.replace("${blockedAds}", msgParsed.state.totalBlockedAds);
-    secondQuantity = secondQuantity.replace("${timeSaved}", timeSaved);
-    pageActionSecondQuantity.innerHTML = secondQuantity;
+    pageActionFirstQuantity.innerText = msgParsed.firstQuantity;
+    let secondQuantityMessage = msgParsed.pageActionQuantities;
+    secondQuantityMessage = secondQuantityMessage.replace("${blockedAds}", msgParsed.secondQuantity);
+    secondQuantityMessage = secondQuantityMessage.replace("${timeSaved}", Math.round(msgParsed.secondQuantity / 1000));
+    pageActionSecondQuantity.innerHTML = secondQuantityMessage;
     pageActionMessage.textContent = msgParsed.pageActionMessage;
   }
 
@@ -86,12 +84,16 @@ function onChromeListening(msg) {
 }
 
 // Update quantities dynamically without refreshing the pageAction panel
-function updateTPNumbers(state) {
-  state = JSON.parse(state);
-  const timeSaved = Math.round(state.totalTimeSaved / 1000);
-  pageActionFirstQuantity.innerText = state.totalBlockedResources;
-  let secondQuantity = msgParsed.pageActionQuantities;
-  secondQuantity = secondQuantity.replace("${blockedAds}", state.totalBlockedAds);
-  secondQuantity = secondQuantity.replace("${timeSaved}", timeSaved);
-  pageActionSecondQuantity.innerHTML = secondQuantity;
+function updateTPNumbers(quantities) {
+  quantities = JSON.parse(quantities);
+  const treatment = quantities.treatment;
+  const firstQuantity = quantities.firstQuantity;
+  const secondQuantity = treatment === "fast"
+    ? Math.round(quantities.secondQuantity / 1000)
+    : quantities.secondQuantity;
+  pageActionFirstQuantity.innerText = firstQuantity;
+  let secondQuantityHTML = msgParsed.pageActionQuantities;
+  secondQuantityHTML = secondQuantityHTML.replace("${blockedAds}", secondQuantity);
+  secondQuantityHTML = secondQuantityHTML.replace("${timeSaved}", secondQuantity);
+  pageActionSecondQuantity.innerHTML = secondQuantityHTML;
 }

@@ -29,7 +29,11 @@ function onChromeListening(copy) {
 
   function handleLoad() {
     addCustomContent();
-    const dimensions = getPanelDimensions();
+    resizeBrowser(introPanel);
+  }
+
+  function resizeBrowser(panel) {
+    const dimensions = getPanelDimensions(panel);
     sendMessageToChrome(
       "browser-resize",
       JSON.stringify(dimensions)
@@ -37,9 +41,9 @@ function onChromeListening(copy) {
   }
 
   // get width and height of panel after it's loaded
-  function getPanelDimensions() {
+  function getPanelDimensions(panel) {
     // get the DOMRect object of panel element, not JSON-able
-    const dimensions = introPanel.getBoundingClientRect();
+    const dimensions = panel.getBoundingClientRect();
     return { width: dimensions.width, height: dimensions.height };
   }
 
@@ -65,13 +69,13 @@ function onChromeListening(copy) {
         event = "introduction-reject";
         confirmationPanel.classList.remove("hidden");
         introPanel.classList.add("hidden");
-        // TODO add call to browserResize for introPanel
+        resizeBrowser(confirmationPanel);
         break;
       case "tracking-protection-study-confirmation-default-button":
         event = "introduction-confirmation-cancel";
         confirmationPanel.classList.add("hidden");
         introPanel.classList.remove("hidden");
-        // TODO add call to browserResize for introPanel
+        resizeBrowser(introPanel);
         break;
       case "tracking-protection-study-confirmation-secondary-button":
         event = "introduction-confirmation-leave-study";

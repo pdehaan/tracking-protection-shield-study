@@ -40,14 +40,14 @@ class TrackingProtectionStudy {
   }
 
   addContentToNewTab(state, doc) {
-    const minutes = state.totalTimeSaved / 1000 / 60;
+    const seconds = state.totalTimeSaved / 1000;
     // if we haven't blocked anything yet, don't modify the page
     if (state.totalBlockedResources) {
       let message = state.newTabMessage;
       message = message.replace("${blockedRequests}", state.totalBlockedResources);
       message = message.replace("${blockedAds}", state.totalBlockedAds);
       message = message.replace("${blockedSites}", state.totalBlockedWebsites);
-      message = message.replace("${minutes}", minutes.toFixed(2));
+      message = message.replace("${seconds}", seconds.toFixed(0));
 
       // Check if the study UI has already been added to this page
       const tpContent = doc.getElementById(`${NEW_TAB_CONTAINER_DIV_ID}`);
@@ -75,14 +75,14 @@ class TrackingProtectionStudy {
   }
 
   updateTPNumbers(state, doc) {
-    const minutes = state.totalTimeSaved / 1000 / 60;
+    const seconds = state.totalTimeSaved / 1000;
     const span = doc.getElementById(`${NEW_TAB_MESSAGE_DIV_ID}`);
     if (span) {
       let message = state.newTabMessage;
       message = message.replace("${blockedRequests}", state.totalBlockedResources);
       message = message.replace("${blockedAds}", state.totalBlockedAds);
       message = message.replace("${blockedSites}", state.totalBlockedWebsites);
-      message = message.replace("${minutes}", minutes.toFixed(2));
+      message = message.replace("${seconds}", seconds.toFixed(0));
       span.innerHTML = message;
     }
   }
