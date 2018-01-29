@@ -6,11 +6,18 @@
 - Cu.import in this file will work for any 'general firefox things' (Services,etc)
   but NOT for addon-specific libs
 */
+const { utils: Cu } = Components;
+Cu.import("resource://gre/modules/XPCOMUtils.jsm");
+XPCOMUtils.defineLazyModuleGetter(this, "Services",
+  "resource://gre/modules/Services.jsm");
 
 /* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(config|EXPORTED_SYMBOLS)" }]*/
 var EXPORTED_SYMBOLS = ["config"];
 
 var config = {
+  PREF_TP_ENABLED_GLOBALLY: "privacy.trackingprotection.enabled",
+  PREF_TP_ENABLED_IN_PRIVATE_WINDOWS: "privacy.trackingprotection.pbmode.enabled",
+
   // required STUDY key
   "study": {
     /** Required for studyUtils.setup():
@@ -86,8 +93,15 @@ var config = {
   // a place to put an 'isEligible' function
   // Will run only during first install attempt
   "isEligible": async function() {
-    // get whatever prefs, addons, telemetry, anything!
-    // Cu.import can see 'firefox things', but not package things.
+    const isGloballyEnabled = Services.prefs.getBoolPref(this.PREF_TP_ENABLED_GLOBALLY);
+    const isPBModeOnly = Services.prefs.getBoolPref(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS);
+    // Has user enabled TP globally?
+    if (isGloballyEnabled) {
+      return false;
+    // Has user disabled TP globally?
+    } else if (!isPBModeOnly) {
+      return false;
+    }
     return true;
   },
 

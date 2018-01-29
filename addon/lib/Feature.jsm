@@ -950,6 +950,9 @@ class Feature {
   }
 
   resetBuiltInTrackingProtection() {
+    if (this.treatment === "pseudo-control") {
+      Services.prefs.setBoolPref(this.PREF_TP_ENABLED_GLOBALLY, false);
+    }
     Services.prefs.setBoolPref(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, true);
   }
 
