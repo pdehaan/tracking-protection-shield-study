@@ -90,7 +90,7 @@ class Feature {
     };
 
     this.newTabMessages = {
-      fast: "Firefox blocked <span class='tracking-protection-messaging-study-message-quantity'>${blockedRequests}</span> trackers and saved you <span class='tracking-protection-messaging-study-message-quantity'>${seconds}</span> seconds",
+      fast: "Firefox blocked <span class='tracking-protection-messaging-study-message-quantity'>${blockedRequests}</span> trackers and saved you ${time}",
       private: "Firefox blocked <span class='tracking-protection-messaging-study-message-quantity'>${blockedRequests}</span> trackers and <span class='tracking-protection-messaging-study-message-quantity'>${blockedAds}</span> advertisements",
     };
 
@@ -364,7 +364,8 @@ class Feature {
       // if the user clicks off the panel, hide it
       this.pageActionPanelChromeWindow.addEventListener("click", (evt) => {
         if (evt.target.ownerDocument.URL !== `resource://${STUDY}/content/page-action-panel.html`
-          && evt.target !== pageActionButton) {
+          && this.state.pageActionPanelIsShowing
+          && evt.target.id !== this.PAGE_ACTION_BUTTON_ID) {
           this.hidePanel("user-clicked-off-panel", false);
         }
       });
@@ -653,10 +654,13 @@ class Feature {
   hidePanel(details, isIntroPanel) {
     const panelType = isIntroPanel ? "introduction-panel" : "page-action-panel";
     const panel = isIntroPanel ? this.introPanel : this.pageActionPanel;
-    panel.hidePopup();
+    if (panel) {
+      panel.hidePopup();
+    }
     if (!isIntroPanel) {
       this.pageActionPanelChromeWindow.removeEventListener("click", (evt) => {
-        if (evt.target !== panel) {
+        if (evt.target.ownerDocument.URL !== `resource://${STUDY}/content/page-action-panel.html`
+          && this.pageActionPanelIsShowing) {
           this.hidePanel("user-clicked-off-panel", false);
         }
       });
