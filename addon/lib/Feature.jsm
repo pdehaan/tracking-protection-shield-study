@@ -152,24 +152,19 @@ class Feature {
 
   addContentMessageListeners() {
     // content listener
-    Services.mm.addMessageListener(
-      "TrackingStudy:OnContentMessage",
-      this.handleMessageFromContent.bind(this)
-    );
+    Services.mm.addMessageListener("TrackingStudy:InitialContent", this);
   }
 
-  handleMessageFromContent(msg) {
-    switch (msg.data.action) {
-      case "get-totals":
-      // TODO bdanforth: update what text is shown based on treatment branch
-      // msg.target is the <browser> element
-        msg.target.messageManager.sendAsyncMessage("TrackingStudy:Totals", {
-          type: "newTabContent",
+  receiveMessage(msg) {
+    switch (msg.name) {
+      case "TrackingStudy:InitialContent":
+        // msg.target is the <browser> element
+        msg.target.messageManager.sendAsyncMessage("TrackingStudy:InitialContent", {
           state: this.state,
         });
         break;
       default:
-        throw new Error(`Message type not recognized, ${ msg.data.action }`);
+        throw new Error(`Message type not recognized, ${ msg.name }`);
     }
   }
 
@@ -722,8 +717,7 @@ class Feature {
         this.state.totalBlockedResources += 1;
         this.state.totalBlockedAds = Math.floor(this.AD_FRACTION * this.state.totalBlockedResources);
 
-        Services.mm.broadcastAsyncMessage("TrackingStudy:Totals", {
-          type: "updateTPNumbers",
+        Services.mm.broadcastAsyncMessage("TrackingStudy:UpdateContent", {
           state: this.state,
         });
         // If the pageAction panel is showing, update the quantities dynamically

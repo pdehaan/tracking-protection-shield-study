@@ -1,6 +1,6 @@
 // Modified from https://github.com/rhelmer/tracking-protection-study/
 
-/* global addMessageListener sendAsyncMessage*/
+/* global addMessageListener sendAsyncMessage removeMessageListener */
 
 "use strict";
 
@@ -11,19 +11,27 @@ const NEW_TAB_MESSAGE_DIV_ID = "tracking-protection-messaging-study-message";
 
 class TrackingProtectionStudy {
   constructor(contentWindow) {
-    this.init(contentWindow);
+    this.contentWindow = contentWindow;
+    this.init();
   }
 
-  async init(contentWindow) {
-    addMessageListener("TrackingStudy:Totals", (msg) => {
-      this.handleMessageFromChrome(msg, contentWindow);
-    });
+  async init() {
+    addMessageListener("TrackingStudy:InitialContent", this);
+    addMessageListener("TrackingStudy:UpdateContent", this);
+    addMessageListener("TrackingStudy:ShuttingDown", this);
+    addMessageListener("TrackingStudy:Uninstalling", this);
   }
 
-  handleMessageFromChrome(msg, contentWindow) {
-    const doc = contentWindow.document;
-    switch (msg.data.type) {
-      case "newTabContent":
+  receiveMessage(msg) {
+    const doc = this.contentWindow.document;
+    switch (msg.name) {
+      case "TrackingStudy:ShuttingDown":
+        this.onShutdown();
+        break;
+      case "TrackingStudy:Uninstalling":
+        this.onUninstall();
+        break;
+      case "TrackingStudy:InitialContent":
         // check if document has already loaded
         if (doc.readyState === "complete") {
           this.addContentToNewTab(msg.data.state, doc);
@@ -31,11 +39,11 @@ class TrackingProtectionStudy {
           doc.addEventListener("DOMContentLoaded", () => this.addContentToNewTab(msg.data.state, doc));
         }
         break;
-      case "updateTPNumbers":
+      case "TrackingStudy:UpdateContent":
         this.updateTPNumbers(msg.data.state, doc);
         break;
       default:
-        throw new Error(`Message type not recognized, ${ msg.data.type }`);
+        throw new Error(`Message name not recognized: ${msg.name}`);
     }
   }
 
@@ -120,9 +128,24 @@ class TrackingProtectionStudy {
       let message = state.newTabMessage;
       message = message.replace("${blockedRequests}", state.totalBlockedResources);
       message = message.replace("${blockedAds}", state.totalBlockedAds);
-      message = message.replace("${blockedSites}", state.totalBlockedWebsites)
+      message = message.replace("${blockedSites}", state.totalBlockedWebsites);
       message = message.replace("${time}", time);
       span.innerHTML = message;
+    }
+  }
+
+  onShutdown() {
+    removeMessageListener("TrackingStudy:InitialContent", this);
+    removeMessageListener("TrackingStudy:UpdateContent", this);
+    removeMessageListener("TrackingStudy:ShuttingDown", this);
+    removeMessageListener("TrackingStudy:Uninstalling", this);
+  }
+
+  onUninstall() {
+    const doc = this.contentWindow.document;
+    const tpContent = doc.getElementById(`${NEW_TAB_CONTAINER_DIV_ID}`);
+    if (tpContent) {
+      tpContent.remove();
     }
   }
 }
@@ -134,7 +157,7 @@ addEventListener("load", function onLoad(evt) {
     // queues a function to be called during a browser's idle periods
     window.requestIdleCallback(() => {
       new TrackingProtectionStudy(window);
-      sendAsyncMessage("TrackingStudy:OnContentMessage", {action: "get-totals"});
+      sendAsyncMessage("TrackingStudy:InitialContent");
     });
   }
 }, true);

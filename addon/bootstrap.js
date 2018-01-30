@@ -186,13 +186,10 @@ this.Bootstrap = {
     if (isUninstall) {
       // Send this before the ShuttingDown event to ensure that message handlers
       // are still registered and receive it.
-      Services.mm.broadcastAsyncMessage("TPStudy:Uninstalling");
-      // TODO bdanforth: process this message on the other end,
-      // see pioneer-enrollment-study
+      Services.mm.broadcastAsyncMessage("TrackingStudy:Uninstalling");
     }
 
-    Services.mm.broadcastAsyncMessage("TPStudy:ShuttingDown");
-    // TODO bdanforth: process this message on the other end.
+    Services.mm.broadcastAsyncMessage("TrackingStudy:ShuttingDown");
 
     if (isUninstall && !studyUtils._isEnding) {
       // we are the first 'uninstall' requestor => must be user action.
