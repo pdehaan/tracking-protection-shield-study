@@ -34,7 +34,7 @@ function onChromeListening(msg) {
     pageActionFirstQuantity.innerText = msgParsed.firstQuantity;
     let secondQuantityMessage = msgParsed.pageActionQuantities;
     secondQuantityMessage = secondQuantityMessage.replace("${blockedAds}", msgParsed.secondQuantity);
-    secondQuantityMessage = secondQuantityMessage.replace("${timeSaved}", Math.round(msgParsed.secondQuantity / 1000));
+    secondQuantityMessage = secondQuantityMessage.replace("${timeSaved}", Math.ceil(msgParsed.secondQuantity / 1000));
     pageActionSecondQuantity.innerHTML = secondQuantityMessage;
     pageActionMessage.textContent = msgParsed.pageActionMessage;
   }
@@ -89,7 +89,7 @@ function updateTPNumbers(quantities) {
   const treatment = quantities.treatment;
   const firstQuantity = quantities.firstQuantity;
   const secondQuantity = treatment === "fast"
-    ? Math.round(quantities.secondQuantity / 1000)
+    ? Math.ceil(quantities.secondQuantity / 1000)
     : quantities.secondQuantity;
   pageActionFirstQuantity.innerText = firstQuantity;
   let secondQuantityHTML = msgParsed.pageActionQuantities;

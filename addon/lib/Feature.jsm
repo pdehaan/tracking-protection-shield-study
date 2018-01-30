@@ -71,6 +71,8 @@ class Feature {
     this.PAGE_ACTION_BUTTON_ID = "tracking-protection-study-button";
     // Estimating # blocked ads as a percentage of # blocked resources
     this.AD_FRACTION = 0.1;
+    // Time saved per page will never exceed this fraction of # blocked resources
+    this.MAX_TIME_SAVED_FRACTION = 0.075;
     this.init(logLevel);
   }
 
@@ -157,8 +159,6 @@ class Feature {
   }
 
   handleMessageFromContent(msg) {
-    let counter;
-    let browser;
     switch (msg.data.action) {
       case "get-totals":
       // TODO bdanforth: update what text is shown based on treatment branch
@@ -167,32 +167,6 @@ class Feature {
           type: "newTabContent",
           state: this.state,
         });
-        break;
-      case "update-time-saved":
-        // TODO bdanforth: control how to update timeSaved counter when:
-        //  - the same page is refreshed (reset timeSaved counter)
-        //  - the user visits another page in the same tab (reset timeSaved counter)
-        //  - other cases? See how rhelmer handles updating this.state.blockedResources
-        counter = Number.parseInt(msg.data.timeSaved);
-        browser = msg.target;
-        this.state.totalTimeSaved += counter;
-        this.state.timeSaved.set(browser, counter);
-        if (this.treatment === "fast") {
-          this.showPageAction(browser.getRootNode());
-          this.setPageActionCounter(browser.getRootNode(), counter);
-          // if the pageAction panel is showing, live update quantities
-          if (this.pageActionPanelIsShowing) {
-            // blocked resources is always the first quantity
-            const firstQuantity = this.state.blockedResources.get(browser);
-            const secondQuantity = counter;
-            this.embeddedBrowser.contentWindow.wrappedJSObject
-              .updateTPNumbers(JSON.stringify({
-                treatment: this.treatment,
-                firstQuantity,
-                secondQuantity,
-              }));
-          }
-        }
         break;
       default:
         throw new Error(`Message type not recognized, ${ msg.data.action }`);
@@ -735,9 +709,15 @@ class Feature {
         counter++;
         this.state.blockedResources.set(details.browser, counter);
         this.state.blockedAds.set(details.browser, Math.floor(this.AD_FRACTION * counter));
-
+        const timeSavedThisRequest = Math.min(Math.random() * (counter) * 1000, this.MAX_TIME_SAVED_FRACTION * counter * 1000);
+        const timeSavedLastRequest = this.state.timeSaved.get(details.browser);
+        if (timeSavedThisRequest > timeSavedLastRequest) {
+          this.state.timeSaved.set(details.browser, timeSavedThisRequest);
+          this.state.totalTimeSaved += (timeSavedThisRequest - timeSavedLastRequest);
+        }
         this.state.totalBlockedResources += 1;
         this.state.totalBlockedAds = Math.floor(this.AD_FRACTION * this.state.totalBlockedResources);
+
         Services.mm.broadcastAsyncMessage("TrackingStudy:Totals", {
           type: "updateTPNumbers",
           state: this.state,
@@ -768,10 +748,9 @@ class Feature {
           // only update pageAction with new blocked requests if we're in the
           // "private" treatment branch, otherwise we want to display timeSaved
           // for the "fast" treatment branch
-          if (details.browser === win.gBrowser.selectedBrowser
-            && this.treatment === "private") {
+          if (details.browser === win.gBrowser.selectedBrowser) {
             this.showPageAction(browser.getRootNode());
-            this.setPageActionCounter(browser.getRootNode(), counter);
+            this.setPageActionCounter(browser.getRootNode(), this.treatment === "private" ? counter : this.state.timeSaved.get(details.browser));
           }
         }
         return { cancel: true };
@@ -843,7 +822,7 @@ class Feature {
     if (toolbarButton) {
       // if "fast" treatment, convert counter from ms to seconds and add unit "s"
       const label = this.treatment === "private" ? counter
-        : `${Math.round(counter / 1000)}s`;
+        : `${Math.ceil(counter / 1000)}s`;
       toolbarButton.setAttribute("label", label);
     }
   }
