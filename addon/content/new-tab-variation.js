@@ -40,15 +40,16 @@ class TrackingProtectionStudy {
   }
 
   addContentToNewTab(state, doc) {
-    const seconds = state.totalTimeSaved / 1000;
+    const time = this.getHumanReadableTimeVals(state.totalTimeSaved);
+
     // if we haven't blocked anything yet, don't modify the page
     if (state.totalBlockedResources) {
       let message = state.newTabMessage;
       message = message.replace("${blockedRequests}", state.totalBlockedResources);
       message = message.replace("${blockedAds}", state.totalBlockedAds);
       message = message.replace("${blockedSites}", state.totalBlockedWebsites);
-      message = message.replace("${seconds}", Math.ceil(seconds));
-
+      message = message.replace("${time}", time);
+      
       // Check if the study UI has already been added to this page
       const tpContent = doc.getElementById(`${NEW_TAB_CONTAINER_DIV_ID}`);
       if (tpContent) {
@@ -74,15 +75,53 @@ class TrackingProtectionStudy {
     }
   }
 
+  // timeSaved comes in as ms
+  getHumanReadableTimeVals(timeSaved) {
+    let timeStr = "";
+    let timeSeconds,
+      timeMinutes,
+      timeHours;
+    timeSeconds = timeSaved / 1000;
+    if (timeSeconds >= 60) {
+      timeMinutes = timeSeconds / 60;
+      timeSeconds = (timeMinutes % 1) * 60;
+      timeMinutes = Math.floor(timeMinutes);
+      if (timeMinutes >= 60) {
+        timeHours = timeMinutes / 60;
+        timeMinutes = (timeHours % 1) * 60;
+        timeHours = Math.floor(timeHours);
+      }
+    }
+    if (timeHours > 0) {
+      timeStr += `<span class='tracking-protection-messaging-study-message-quantity'>${ Math.round(timeHours) }</span> hour`;
+      if (Math.round(timeHours) > 1) {
+        timeStr += "s";
+      }
+    }
+    if (timeMinutes > 0) {
+      timeStr += `${timeHours > 0 ? (timeSeconds > 0 ? "," : " and") : ""} <span class='tracking-protection-messaging-study-message-quantity'>${ Math.round(timeMinutes) }</span> minute`;
+      if (Math.round(timeMinutes) > 1) {
+        timeStr += "s";
+      }
+    }
+    if (timeSeconds > 0) {
+      timeStr += `${timeMinutes > 0 ? " and" : ""} <span class='tracking-protection-messaging-study-message-quantity'>${ Math.round(timeSeconds) }</span> second`;
+      if (Math.round(timeSeconds) > 1) {
+        timeStr += "s";
+      }
+    }
+    return timeStr;
+  }
+
   updateTPNumbers(state, doc) {
-    const seconds = state.totalTimeSaved / 1000;
+    const time = this.getHumanReadableTimeVals(state.totalTimeSaved);
     const span = doc.getElementById(`${NEW_TAB_MESSAGE_DIV_ID}`);
     if (span) {
       let message = state.newTabMessage;
       message = message.replace("${blockedRequests}", state.totalBlockedResources);
       message = message.replace("${blockedAds}", state.totalBlockedAds);
-      message = message.replace("${blockedSites}", state.totalBlockedWebsites);
-      message = message.replace("${seconds}", Math.ceil(seconds));
+      message = message.replace("${blockedSites}", state.totalBlockedWebsites)
+      message = message.replace("${time}", time);
       span.innerHTML = message;
     }
   }

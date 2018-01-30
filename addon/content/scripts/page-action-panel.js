@@ -33,8 +33,12 @@ function onChromeListening(msg) {
   function addCustomContent() {
     pageActionFirstQuantity.innerText = msgParsed.firstQuantity;
     let secondQuantityMessage = msgParsed.pageActionQuantities;
-    secondQuantityMessage = secondQuantityMessage.replace("${blockedAds}", msgParsed.secondQuantity);
-    secondQuantityMessage = secondQuantityMessage.replace("${timeSaved}", Math.ceil(msgParsed.secondQuantity / 1000));
+    // convert time units
+    const { timeSaved, timeUnit } = getHumanReadableTime(msgParsed.secondQuantity);
+    const blockedAds = msgParsed.secondQuantity;
+    secondQuantityMessage = secondQuantityMessage.replace("${blockedAds}", blockedAds);
+    secondQuantityMessage = secondQuantityMessage.replace("${timeSaved}", timeSaved);
+    secondQuantityMessage = secondQuantityMessage.replace("${timeUnit}", timeUnit);
     pageActionSecondQuantity.innerHTML = secondQuantityMessage;
     pageActionMessage.textContent = msgParsed.pageActionMessage;
   }
@@ -83,17 +87,37 @@ function onChromeListening(msg) {
   }
 }
 
+function getHumanReadableTime(perPageTimeSaved) {
+  let timeSaved = "";
+  let timeUnit = "";
+  const timeSeconds = perPageTimeSaved / 1000;
+  if (timeSeconds >= 60) {
+    const timeMinutes = timeSeconds / 60;
+    timeSaved += `${timeMinutes.toFixed(2)}`;
+    timeUnit += "minute";
+    if (timeMinutes > 1) {
+      timeUnit += "s";
+    }
+  } else {
+    timeSaved += `${Math.round(timeSeconds)}`;
+    timeUnit += "second";
+    if (Math.round(timeSeconds) !== 1) {
+      timeUnit += "s";
+    }
+  }
+  return { timeSaved, timeUnit };
+}
+
 // Update quantities dynamically without refreshing the pageAction panel
 function updateTPNumbers(quantities) {
   quantities = JSON.parse(quantities);
-  const treatment = quantities.treatment;
   const firstQuantity = quantities.firstQuantity;
-  const secondQuantity = treatment === "fast"
-    ? Math.ceil(quantities.secondQuantity / 1000)
-    : quantities.secondQuantity;
+  const { timeSaved, timeUnit } = getHumanReadableTime(quantities.secondQuantity);
+  const blockedAds = quantities.secondQuantity;
   pageActionFirstQuantity.innerText = firstQuantity;
   let secondQuantityHTML = msgParsed.pageActionQuantities;
-  secondQuantityHTML = secondQuantityHTML.replace("${blockedAds}", secondQuantity);
-  secondQuantityHTML = secondQuantityHTML.replace("${timeSaved}", secondQuantity);
+  secondQuantityHTML = secondQuantityHTML.replace("${blockedAds}", blockedAds);
+  secondQuantityHTML = secondQuantityHTML.replace("${timeSaved}", timeSaved);
+  secondQuantityHTML = secondQuantityHTML.replace("${timeUnit}", timeUnit);
   pageActionSecondQuantity.innerHTML = secondQuantityHTML;
 }
