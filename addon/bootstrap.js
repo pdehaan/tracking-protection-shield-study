@@ -29,11 +29,12 @@ this.Bootstrap = {
   STUDY_DURATION_WEEKS: 2,
 
   async startup(addonData, reason) {
-
     // can't access resource:// modules until addon startup()
     this.REASONS = studyUtils.REASONS;
 
     this.initLog();
+
+    this.log.debug("startup", this.REASONS[reason] || reason);
 
     this.initStudyUtils(addonData.id, addonData.version);
 
@@ -41,9 +42,18 @@ this.Bootstrap = {
     const variation = await this.selectVariation();
 
     // if addon was just installed, check if user is eligible
-    if ((this.REASONS[reason]) === "ADDON_INSTALL"
-      && await !this.isEligible(reason)) {
-      return;
+    if ((this.REASONS[reason]) === "ADDON_INSTALL") {
+      //  telemetry "enter" ONCE
+      await studyUtils.firstSeen();
+      const eligible = await config.isEligible(); // addon-specific
+      if (!eligible) {
+        this.log.debug("User is ineligible, ending study.");
+        // 1. uses config.endings.ineligible.url if any,
+        // 2. sends UT for "ineligible"
+        // 3. then uninstalls addon
+        await studyUtils.endStudy({reason: "ineligible"});
+        return;
+      }
     }
 
     /*
@@ -55,7 +65,7 @@ this.Bootstrap = {
     this.initStudyDuration();
 
     if (this.isStudyExpired()) {
-      studyUtils.endStudy({ reason: "expired" });
+      await studyUtils.endStudy({ reason: "expired" });
     }
 
     // log what the study variation and other info is.
@@ -115,24 +125,6 @@ this.Bootstrap = {
       return variation;
     }
     return name;
-  },
-
-  /**
-  * addon_install ONLY:
-  * - note first seen,
-  * - check eligible
-  */
-  async isEligible() {
-    //  telemetry "enter" ONCE
-    studyUtils.firstSeen();
-    const isEligible = await config.isEligible(); // addon-specific
-    if (!isEligible) {
-      // 1. uses config.endings.ineligible.url if any,
-      // 2. sends UT for "ineligible"
-      // 3. then uninstalls addon
-      await studyUtils.endStudy({reason: "ineligible"});
-    }
-    return isEligible;
   },
 
   initStudyDuration() {
@@ -209,16 +201,20 @@ this.Bootstrap = {
       Services.prefs.clearUserPref(this.EXPIRATION_DATE_STRING_PREF);
       // TODO bdanforth: also remove treatment override pref (Issue #37)
 
-      // passing through Feature.jsm to also reset TP to default setting
-      // TODO/QUESTION: Do we need to feature.uninit() & Cu.unload here too?
-      // In general, am I shutting everything down properly (ex: clearUserPref)
-      await this.feature.endStudy("user-disable");
+      // Study could end due to user ineligible or study expired, in which case feature is not initialized
+      if (this.feature) {
+        await this.feature.endStudy("user-disable");
+      }
     }
 
     // normal shutdown, or 2nd uninstall request
 
+    // Study could end due to user ineligible or study expired, in which case feature is not initialized
+    if (this.feature) {
+      await this.feature.uninit();
+    }
+
     // Unload addon-specific modules
-    this.feature.uninit();
     Cu.unload(`resource://${STUDY}/lib/Feature.jsm`);
     Cu.unload(`resource://${STUDY}/Config.jsm`);
     Cu.unload(`resource://${STUDY}/StudyUtils.jsm`);
