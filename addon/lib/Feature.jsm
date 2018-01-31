@@ -649,24 +649,35 @@ class Feature {
   * if it returns { cancel: true }, the request will be blocked.
   */
   onBeforeRequest(details) {
-    // details.url is the target url for the request
+    const DONT_BLOCK_THE_REQUEST = {};
+    const BLOCK_THE_REQUEST = { cancel: true };
+
+    // If a request has started while the addon is shutting down and
+    // Feature.jsm has unloaded
+    if (!URL || !Services) {
+      return DONT_BLOCK_THE_REQUEST;
+    }
+
+    // make sure there is a details object, that the request has a target URL,
+    // and that the resource being requested is going to be loaded into a XUL browser
     if (details && details.url && details.browser) {
       const browser = details.browser;
-      // nsIURI object with attributes to set and query the basic components of
-      // the browser's current URI
+      // the currently loaded URL for the browser
       const currentURI = browser.currentURI;
 
+      // if no URL is loaded into the browser
       if (!currentURI) {
-        return {};
+        return DONT_BLOCK_THE_REQUEST;
       }
 
-      // the URL for the entity making the request
+      // if there's no URL for the resource that triggered the request
       if (!details.originUrl) {
-        return {};
+        return DONT_BLOCK_THE_REQUEST;
       }
 
+      // if the page loaded into the browser is not a "normal webpage"
       if (currentURI.scheme !== "http" && currentURI.scheme !== "https") {
-        return {};
+        return DONT_BLOCK_THE_REQUEST;
       }
 
       // the domain name for the current page (e.g. www.nytimes.com)
@@ -699,7 +710,7 @@ class Feature {
             // if it is, don't block the request; if it isn't, block the request
             if (resources.includes(rootDomainCurrentHost)
               || properties.includes(rootDomainCurrentHost)) {
-              return {};
+              return DONT_BLOCK_THE_REQUEST;
             }
           }
         }
@@ -716,7 +727,7 @@ class Feature {
         }
         this.state.totalBlockedResources += 1;
         this.state.totalBlockedAds = Math.floor(this.AD_FRACTION * this.state.totalBlockedResources);
-
+        
         Services.mm.broadcastAsyncMessage("TrackingStudy:UpdateContent", {
           state: this.state,
         });
@@ -751,10 +762,10 @@ class Feature {
             this.setPageActionCounter(browser.getRootNode(), this.treatment === "private" ? counter : this.state.timeSaved.get(details.browser));
           }
         }
-        return { cancel: true };
+        return BLOCK_THE_REQUEST;
       }
     }
-    return {};
+    return DONT_BLOCK_THE_REQUEST;
   }
 
   // e.g. takes "www.mozilla.com", and turns it into "mozilla.com"
