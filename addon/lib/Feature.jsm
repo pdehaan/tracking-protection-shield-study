@@ -160,7 +160,10 @@ class Feature {
       case "TrackingStudy:InitialContent":
         // msg.target is the <browser> element
         msg.target.messageManager.sendAsyncMessage("TrackingStudy:InitialContent", {
-          state: this.state,
+          blockedResources: this.state.totalBlockedResources,
+          timeSaved: this.state.totalTimeSaved,
+          blockedAds: this.state.totalBlockedAds,
+          newTabMessage: this.newTabMessages[this.treatment],
         });
         break;
       default:
@@ -729,7 +732,9 @@ class Feature {
         this.state.totalBlockedAds = Math.floor(this.AD_FRACTION * this.state.totalBlockedResources);
         
         Services.mm.broadcastAsyncMessage("TrackingStudy:UpdateContent", {
-          state: this.state,
+          blockedResources: this.state.totalBlockedResources,
+          timeSaved: this.state.totalTimeSaved,
+          blockedAds: this.state.totalBlockedAds,
         });
         // If the pageAction panel is showing, update the quantities dynamically
         if (this.state.pageActionPanelIsShowing) {
