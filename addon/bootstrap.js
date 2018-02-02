@@ -19,7 +19,7 @@ XPCOMUtils.defineLazyModuleGetter(this, "Feature",
 
 this.Bootstrap = {
 
-  UI_AVAILABLE_NOTIFICATION: "browser-delayed-startup-finished",
+  UI_AVAILABLE_NOTIFICATION: "sessionstore-windows-restored",
   VARIATION_OVERRIDE_PREF:
     "extensions.tracking_protection_messaging_study.variation_override",
   DURATION_OVERRIDE_PREF:
