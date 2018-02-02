@@ -1,1 +1,6 @@
 addon/StudyUtils.jsm
+addon/lib/StudyUtils.jsm
+test/*
+addon/test/*
+addon/lib/disconnect-*
+addon/lib/Canonicalize.jsm

@@ -25,6 +25,7 @@ class TrackingProtectionStudy {
 
   receiveMessage(msg) {
     const doc = this.contentWindow.document;
+    this.addContentToNewTabRef = () => this.addContentToNewTab(msg.data, doc);
     switch (msg.name) {
       case "TrackingStudy:ShuttingDown":
         this.onShutdown();
@@ -37,7 +38,7 @@ class TrackingProtectionStudy {
         if (doc.readyState === "complete") {
           this.addContentToNewTab(msg.data, doc);
         } else {
-          doc.addEventListener("DOMContentLoaded", () => this.addContentToNewTab(msg.data, doc));
+          doc.addEventListener("DOMContentLoaded", this.addContentToNewTabRef);
         }
         break;
       case "TrackingStudy:UpdateContent":
@@ -137,10 +138,13 @@ class TrackingProtectionStudy {
   }
 
   onShutdown() {
+    const doc = this.contentWindow.document;
     removeMessageListener("TrackingStudy:InitialContent", this);
     removeMessageListener("TrackingStudy:UpdateContent", this);
     removeMessageListener("TrackingStudy:ShuttingDown", this);
     removeMessageListener("TrackingStudy:Uninstalling", this);
+    removeEventListener("load", handleLoad, true);
+    doc.removeEventListener("DOMContentLoaded", this.addContentToNewTabRef);
   }
 
   onUninstall() {
@@ -152,7 +156,9 @@ class TrackingProtectionStudy {
   }
 }
 
-addEventListener("load", function onLoad(evt) {
+addEventListener("load", handleLoad, true);
+
+function handleLoad(evt) {
   const window = evt.target.defaultView;
   const location = window.location.href;
   if (location === ABOUT_NEWTAB_URL || location === ABOUT_HOME_URL) {
@@ -162,4 +168,4 @@ addEventListener("load", function onLoad(evt) {
       sendAsyncMessage("TrackingStudy:InitialContent");
     });
   }
-}, true);
+}

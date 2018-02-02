@@ -69,6 +69,7 @@ class Feature {
     this.PREF_TP_ENABLED_GLOBALLY = "privacy.trackingprotection.enabled";
     this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS = "privacy.trackingprotection.pbmode.enabled";
     this.PAGE_ACTION_BUTTON_ID = "tracking-protection-study-button";
+    this.PANEL_ID = "tracking-protection-study-intro-panel";
     // Estimating # blocked ads as a percentage of # blocked resources
     this.AD_FRACTION = 0.1;
     // Time saved per page will never exceed this fraction of # blocked resources
@@ -337,15 +338,20 @@ class Feature {
 
     panel.openPopup(pageActionButton);
 
+    // if the user clicks off the panel, hide it
     if (!isIntroPanel) {
-      // if the user clicks off the panel, hide it
-      this.pageActionPanelChromeWindow.addEventListener("click", (evt) => {
-        if (evt.target.ownerDocument.URL !== `resource://${STUDY}/content/page-action-panel.html`
-          && this.state.pageActionPanelIsShowing
-          && evt.target.id !== this.PAGE_ACTION_BUTTON_ID) {
-          this.hidePanel("user-clicked-off-panel", false);
-        }
-      });
+      // A new reference is created after .bind() is called, so we need to pass the same reference
+      // to addEventListener and removeEventListener at cleanup to avoid memory leaks.
+      this.handleChromeWindowClickRef = this.handleChromeWindowClick.bind(this);
+      this.pageActionPanelChromeWindow.addEventListener("click", this.handleChromeWindowClickRef);
+    }
+  }
+
+  handleChromeWindowClick(evt) {
+    if (evt.target.ownerDocument.URL !== `resource://${STUDY}/content/page-action-panel.html`
+      && this.state.pageActionPanelIsShowing
+      && evt.target.id !== this.PAGE_ACTION_BUTTON_ID) {
+      this.hidePanel("user-clicked-off-panel", false);
     }
   }
 
@@ -354,7 +360,7 @@ class Feature {
     const browserSrc = isIntroPanel ? `resource://${STUDY}/content/intro-panel.html`
       : `resource://${STUDY}/content/page-action-panel.html`;
     const panel = doc.createElementNS(this.XUL_NS, "panel");
-    panel.setAttribute("id", "tracking-protection-study-intro-panel");
+    panel.setAttribute("id", `${this.PANEL_ID}`);
     panel.setAttribute("type", "arrow");
     panel.setAttribute("level", "parent");
     panel.setAttribute("noautohide", "true");
@@ -381,9 +387,10 @@ class Feature {
   }
 
   addBrowserContent() {
+    this.handleEmbeddedBrowserLoadRef = this.handleEmbeddedBrowserLoad.bind(this);
     this.embeddedBrowser.addEventListener(
       "load",
-      this.handleEmbeddedBrowserLoad.bind(this),
+      this.handleEmbeddedBrowserLoadRef,
       // capture is required: event target is the HTML document <browser> loads
       { capture: true }
     );
@@ -481,37 +488,41 @@ class Feature {
 
   // These listeners are added to both the intro panel and the pageAction panel
   addPanelListeners(panel) {
-    let panelShownTime;
-    panel.addEventListener("popupshown", () => {
-      const panelType = (this.embeddedBrowser.src === `resource://${STUDY}/content/intro-panel.html`) ?
-        "intro-panel" : "page-action-panel";
-      if (panelType === "intro-panel") {
-        this.state.introPanelIsShowing = true;
-      } else {
-        this.state.pageActionPanelIsShowing = true;
-      }
-      this.log.debug(`${panelType} shown.`);
-      panelShownTime = Date.now();
-      this.telemetry({ event: `${panelType}-shown` });
-    });
+    this.handlePopupShownRef = this.handlePopupShown.bind(this);
+    panel.addEventListener("popupshown", this.handlePopupShownRef);
+    this.handlePopupHiddenRef = this.handlePopupHidden.bind(this);
+    panel.addEventListener("popuphidden", this.handlePopupHiddenRef);
+  }
 
-    panel.addEventListener("popuphidden", () => {
-      const panelType = (this.embeddedBrowser.src === `resource://${STUDY}/content/intro-panel.html`) ?
-        "intro-panel" : "page-action-panel";
-      if (panelType === "intro-panel") {
-        this.state.introPanelIsShowing = false;
-      } else {
-        this.state.pageActionPanelIsShowing = false;
-      }
-      this.log.debug(`${panelType} hidden.`);
-      const panelHiddenTime = Date.now();
-      const panelOpenTime =
-        (panelHiddenTime - panelShownTime) / 1000;
-      this.log.debug(`${panelType} was open for ${Math.round(panelOpenTime)} seconds.`);
-      this.telemetry({
-        event: `${panelType}-hidden`,
-        secondsPanelWasShowing: Math.round(panelOpenTime).toString(),
-      });
+  handlePopupShown() {
+    const panelType = (this.embeddedBrowser.src === `resource://${STUDY}/content/intro-panel.html`) ?
+      "intro-panel" : "page-action-panel";
+    if (panelType === "intro-panel") {
+      this.state.introPanelIsShowing = true;
+    } else {
+      this.state.pageActionPanelIsShowing = true;
+    }
+    this.log.debug(`${panelType} shown.`);
+    this.panelShownTime = Date.now();
+    this.telemetry({ event: `${panelType}-shown` });
+  }
+
+  handlePopupHidden() {
+    const panelType = (this.embeddedBrowser.src === `resource://${STUDY}/content/intro-panel.html`) ?
+      "intro-panel" : "page-action-panel";
+    if (panelType === "intro-panel") {
+      this.state.introPanelIsShowing = false;
+    } else {
+      this.state.pageActionPanelIsShowing = false;
+    }
+    this.log.debug(`${panelType} hidden.`);
+    const panelHiddenTime = Date.now();
+    const panelOpenTime =
+      (panelHiddenTime - this.panelShownTime) / 1000;
+    this.log.debug(`${panelType} was open for ${Math.round(panelOpenTime)} seconds.`);
+    this.telemetry({
+      event: `${panelType}-hidden`,
+      secondsPanelWasShowing: Math.round(panelOpenTime).toString(),
     });
   }
 
@@ -539,8 +550,9 @@ class Feature {
 
     const filter = {urls: new win.MatchPatternSet(["*://*/*"])};
 
+    this.onBeforeRequestRef = this.onBeforeRequest.bind(this);
     WebRequest.onBeforeRequest.addListener(
-      this.onBeforeRequest.bind(this),
+      this.onBeforeRequestRef,
       // listener will only be called for requests whose targets match the filter
       filter,
       ["blocking"]
@@ -557,11 +569,12 @@ class Feature {
   * @param {ChromeWindow} win
   */
   addWindowEventListeners(win) {
+    this.onTabChangeRef = this.onTabChange.bind(this);
     if (win && win.gBrowser) {
       win.gBrowser.addTabsProgressListener(this);
       win.gBrowser.tabContainer.addEventListener(
         "TabSelect",
-        this.onTabChange.bind(this)
+        this.onTabChangeRef
       );
       // handle the case where the window closed, but intro or pageAction panel
       // is still open.
@@ -803,26 +816,28 @@ class Feature {
       pageActionButton.setAttribute(
         "image",
         "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled");
-      pageActionButton.addEventListener("command", (evt) => {
-        // Make sure the user clicked on the pageAction button, otherwise
-        // once the intro panel is closed by the user clicking a button inside
-        // of it, it will trigger the pageAction panel to open immediately.
-        if (evt.target.tagName === "toolbarbutton"
-          && !this.state.introPanelIsShowing) {
-          if (!this.state.pageActionPanelIsShowing) {
-            const isIntroPanel = false;
-            this.showPanel(
-              win,
-              this.introPanelMessages[this.treatment],
-              isIntroPanel
-            );
-          } else {
-            this.hidePanel("page-action-click", false);
-          }
-        }
-      });
+      pageActionButton.addEventListener("command", (evt) => this.handlePageActionButtonCommand(evt, win));
 
       urlbar.append(pageActionButton);
+    }
+  }
+
+  handlePageActionButtonCommand(evt, win) {
+    // Make sure the user clicked on the pageAction button, otherwise
+    // once the intro panel is closed by the user clicking a button inside
+    // of it, it will trigger the pageAction panel to open immediately.
+    if (evt.target.id === `${this.PAGE_ACTION_BUTTON_ID}`
+      && !this.state.introPanelIsShowing) {
+      if (!this.state.pageActionPanelIsShowing) {
+        const isIntroPanel = false;
+        this.showPanel(
+          win,
+          this.introPanelMessages[this.treatment],
+          isIntroPanel
+        );
+      } else {
+        this.hidePanel("page-action-click", false);
+      }
     }
   }
 
@@ -908,7 +923,11 @@ class Feature {
   uninit() {
     // ensure the frame script is not loaded into any new tabs
     Services.mm.removeDelayedFrameScript(this.FRAME_SCRIPT_URL);
-    // TODO bdanforth: disable frame scripts already loaded (Issue #39)
+
+    // Shutdown intro panel or pageAction panel, whichever is active
+    if (this.embeddedBrowser.contentWindow) {
+      this.embeddedBrowser.contentWindow.wrappedJSObject.onShutdown();
+    }
 
     // Remove listeners from all open windows.
     const enumerator = Services.wm.getEnumerator("navigator:browser");
@@ -918,25 +937,39 @@ class Feature {
         continue;
       }
 
+      const panel = win.document.getElementById(`${this.PANEL_ID}`);
+      if (panel) {
+        this.removePanelListeners(panel);
+      }
+
       const button = win.document.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
       if (button) {
+        button.removeEventListener("command", (evt) => this.handlePageActionButtonCommand(evt, win));
         button.parentElement.removeChild(button);
       }
 
       const filter = {urls: new win.MatchPatternSet(["*://*/*"])};
       WebRequest.onBeforeRequest.removeListener(
-        this.onBeforeRequest.bind(this),
+        this.onBeforeRequestRef,
         // listener will only be called for requests whose targets match the filter
         filter,
         ["blocking"]
       );
       win.gBrowser.removeTabsProgressListener(this);
-      win.gBrowser.tabContainer.removeEventListener("TabSelect", this.onTabChange);
+      win.gBrowser.tabContainer.removeEventListener("TabSelect", this.onTabChangeRef);
 
       win.removeEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
 
       Services.wm.removeListener(this);
     }
+
+    this.embeddedBrowser.removeEventListener(
+      "load",
+      this.handleEmbeddedBrowserLoadRef,
+      { capture: true }
+    );
+
+    this.pageActionPanelChromeWindow.removeEventListener("click", this.handleChromeWindowClickRef);
 
     const uri = Services.io.newURI(this.STYLESHEET_URL);
     styleSheetService.unregisterSheet(uri, styleSheetService.AGENT_SHEET);
@@ -945,6 +978,11 @@ class Feature {
     Cu.unload("resource://tracking-protection-study/BlockLists.jsm");
 
     this.removeBuiltInTrackingProtectionListeners();
+  }
+
+  removePanelListeners(panel) {
+    panel.removeEventListener("popupshown", this.handlePopupShownRef);
+    panel.removeEventListener("popuphidden", this.handlePopupHiddenRef);
   }
 
   resetBuiltInTrackingProtection() {

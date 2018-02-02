@@ -1,11 +1,11 @@
 {
   "name": "tracking-protection-messaging-study",
   "description": "Tracking Protection Messaging Shield Study",
-  "version": "1.2.0",
+  "version": "1.0.1",
   "author": "Mozilla Bianca Danforth <bdanforth@mozilla.com>",
   "addon": {
     "$ABOUT": "use these variables fill the moustache templates",
-    "id": "tracking-protection-messaging-study@shield-study.mozilla.com",
+    "id": "tracking-protection-messaging-study@shield.mozilla.org",
     "name": "Tracking Protection Messaging Shield Study",
     "minVersion": "57.0",
     "maxVersion": "*",
