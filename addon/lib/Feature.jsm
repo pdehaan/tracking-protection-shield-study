@@ -4,7 +4,7 @@
 
 "use strict";
 
-/* global blocklists */
+/* global blocklists CleanupManager */
 /* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(EXPORTED_SYMBOLS|Feature)" }]*/
 
 /**  What this Feature does: TODO bdanforth: complete
@@ -42,6 +42,8 @@ XPCOMUtils.defineLazyModuleGetter(this, "canonicalizeHost",
   `resource://${STUDY}/lib/Canonicalize.jsm`);
 XPCOMUtils.defineLazyModuleGetter(this, "blocklists",
   `resource://${STUDY}/lib/BlockLists.jsm`);
+XPCOMUtils.defineLazyModuleGetter(this, "CleanupManager",
+  `resource://${STUDY}/lib/CleanupManager.jsm`);
 
 const EXPORTED_SYMBOLS = ["Feature"];
 
@@ -154,6 +156,7 @@ class Feature {
   addContentMessageListeners() {
     // content listener
     Services.mm.addMessageListener("TrackingStudy:InitialContent", this);
+    CleanupManager.addCleanupHandler(() => Services.mm.removeMessageListener("TrackingStudy:InitialContent", this));
   }
 
   receiveMessage(msg) {
@@ -190,7 +193,9 @@ class Feature {
 
   addBuiltInTrackingProtectionListeners() {
     Services.prefs.addObserver(this.PREF_TP_ENABLED_GLOBALLY, this);
+    CleanupManager.addCleanupHandler(() => Services.prefs.removeObserver(this.PREF_TP_ENABLED_GLOBALLY, this));
     Services.prefs.addObserver(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, this);
+    CleanupManager.addCleanupHandler(() => Services.prefs.removeObserver(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, this));
   }
 
   async observe(subject, topic, data) {
@@ -278,6 +283,9 @@ class Feature {
     // 3. Add new tab variation
     this.state.newTabMessage = this.newTabMessages[this.treatment];
     Services.mm.loadFrameScript(this.FRAME_SCRIPT_URL, true);
+    // ensure the frame script is not loaded into any new tabs on shutdown,
+    // existing frame scripts already loaded are handled by the bootstrap shutdown method
+    CleanupManager.addCleanupHandler(() => Services.mm.removeDelayedFrameScript(this.FRAME_SCRIPT_URL));
 
     // 4. Add pageAction icon and pageAction panel; this is the complicated part
     await this.addPageActionAndPanel(win);
@@ -289,6 +297,7 @@ class Feature {
     // 4.2 load stylesheet for pageAction panel
     const uri = Services.io.newURI(this.STYLESHEET_URL);
     styleSheetService.loadAndRegisterSheet(uri, styleSheetService.AGENT_SHEET);
+    CleanupManager.addCleanupHandler(() => styleSheetService.unregisterSheet(uri, styleSheetService.AGENT_SHEET));
     // 4.3 Add listeners to all open windows to know when to update pageAction
     const enumerator = Services.wm.getEnumerator("navigator:browser");
     while (enumerator.hasMoreElements()) {
@@ -302,11 +311,12 @@ class Feature {
     // Depending on which event happens (ex: onOpenWindow, onLocationChange),
     // it will call that listener method that exists on "this"
     Services.wm.addListener(this);
+    CleanupManager.addCleanupHandler(() => Services.wm.removeListener(this));
   }
 
   /**
   * Display instrumented 'introductory panel' explaining the feature to the user
-  * Telemetry Probes: (TODO bdanforth: add telemetry probes)
+  * Telemetry Probes:
   *   - {event: introduction-shown}
   *   - {event: introduction-accept}
   *   - {event: introduction-leave-study}
@@ -340,10 +350,8 @@ class Feature {
 
     // if the user clicks off the panel, hide it
     if (!isIntroPanel) {
-      // A new reference is created after .bind() is called, so we need to pass the same reference
-      // to addEventListener and removeEventListener at cleanup to avoid memory leaks.
-      this.handleChromeWindowClickRef = this.handleChromeWindowClick.bind(this);
-      this.pageActionPanelChromeWindow.addEventListener("click", this.handleChromeWindowClickRef);
+      this.pageActionPanelChromeWindow.addEventListener("click", (evt) => this.handleChromeWindowClick(evt));
+      CleanupManager.addCleanupHandler(() => this.pageActionPanelChromeWindow.removeEventListener("click", (evt) => this.handleChromeWindowClick(evt)));
     }
   }
 
@@ -387,13 +395,25 @@ class Feature {
   }
 
   addBrowserContent() {
-    this.handleEmbeddedBrowserLoadRef = this.handleEmbeddedBrowserLoad.bind(this);
+    const handleEmbeddedBrowserLoadRef = this.handleEmbeddedBrowserLoad.bind(this);
     this.embeddedBrowser.addEventListener(
       "load",
-      this.handleEmbeddedBrowserLoadRef,
+      handleEmbeddedBrowserLoadRef,
       // capture is required: event target is the HTML document <browser> loads
       { capture: true }
     );
+    CleanupManager.addCleanupHandler(() => {
+      try {
+        this.embeddedBrowser.removeEventListener(
+          "load",
+          handleEmbeddedBrowserLoadRef,
+          // capture is required: event target is the HTML document <browser> loads
+          { capture: true }
+        );
+      } catch (error) {
+        // The <browser> has been removed from the page (via the pageAction button being removed)
+      }
+    });
   }
 
   handleEmbeddedBrowserLoad() {
@@ -488,10 +508,24 @@ class Feature {
 
   // These listeners are added to both the intro panel and the pageAction panel
   addPanelListeners(panel) {
-    this.handlePopupShownRef = this.handlePopupShown.bind(this);
-    panel.addEventListener("popupshown", this.handlePopupShownRef);
-    this.handlePopupHiddenRef = this.handlePopupHidden.bind(this);
-    panel.addEventListener("popuphidden", this.handlePopupHiddenRef);
+    const handlePopupShownRef = this.handlePopupShown.bind(this);
+    panel.addEventListener("popupshown", handlePopupShownRef);
+    CleanupManager.addCleanupHandler(() => {
+      try {
+        panel.removeEventListener("popupshown", handlePopupShownRef);
+      } catch (error) {
+        // The panel has already been removed from the doc via the pageAction button being removed
+      }
+    });
+    const handlePopupHiddenRef = this.handlePopupHidden.bind(this);
+    panel.addEventListener("popuphidden", handlePopupHiddenRef);
+    CleanupManager.addCleanupHandler(() => {
+      try {
+        panel.removeEventListener("popuphidden", handlePopupHiddenRef);
+      } catch (error) {
+        // The panel has already been removed from the doc via the pageAction button being removed
+      }
+    });
   }
 
   handlePopupShown() {
@@ -550,13 +584,21 @@ class Feature {
 
     const filter = {urls: new win.MatchPatternSet(["*://*/*"])};
 
-    this.onBeforeRequestRef = this.onBeforeRequest.bind(this);
+    const onBeforeRequestRef = this.onBeforeRequest.bind(this);
     WebRequest.onBeforeRequest.addListener(
-      this.onBeforeRequestRef,
+      onBeforeRequestRef,
       // listener will only be called for requests whose targets match the filter
       filter,
       ["blocking"]
     );
+    CleanupManager.addCleanupHandler(() => {
+      WebRequest.onBeforeRequest.removeListener(
+        onBeforeRequestRef,
+        // listener will only be called for requests whose targets match the filter
+        filter,
+        ["blocking"]
+      );
+    });
   }
 
   /**
@@ -569,16 +611,40 @@ class Feature {
   * @param {ChromeWindow} win
   */
   addWindowEventListeners(win) {
-    this.onTabChangeRef = this.onTabChange.bind(this);
     if (win && win.gBrowser) {
       win.gBrowser.addTabsProgressListener(this);
+      CleanupManager.addCleanupHandler(() => {
+        try {
+          win.gBrowser.removeTabsProgressListener(this);
+        } catch (error) {
+          // the window has likely been closed already
+        }
+      });
+      const onTabChangeRef = this.onTabChange.bind(this);
       win.gBrowser.tabContainer.addEventListener(
         "TabSelect",
-        this.onTabChangeRef
+        onTabChangeRef
       );
+      CleanupManager.addCleanupHandler(() => {
+        try {
+          win.gBrowser.tabContainer.removeEventListener(
+            "TabSelect",
+            onTabChangeRef
+          );
+        } catch (error) {
+          // the window has likely been closed already
+        }
+      });
       // handle the case where the window closed, but intro or pageAction panel
       // is still open.
       win.addEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
+      CleanupManager.addCleanupHandler(() => {
+        try {
+          win.removeEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
+        } catch (error) {
+          // the window has likely been closed already
+        }
+      });
     }
   }
 
@@ -605,6 +671,17 @@ class Feature {
       () => this.addWindowEventListeners(win),
       {once: true}
     );
+    CleanupManager.addCleanupHandler(() => {
+      try {
+        win.removeEventListener(
+          "load",
+          () => this.addWindowEventListeners(win),
+          {once: true}
+        );
+      } catch (error) {
+        // the window has likely been closed already
+      }
+    });
   }
 
   // This method is called when opening a new tab among many other times.
@@ -648,12 +725,7 @@ class Feature {
       panel.hidePopup();
     }
     if (!isIntroPanel) {
-      this.pageActionPanelChromeWindow.removeEventListener("click", (evt) => {
-        if (evt.target.ownerDocument.URL !== `resource://${STUDY}/content/page-action-panel.html`
-          && this.pageActionPanelIsShowing) {
-          this.hidePanel("user-clicked-off-panel", false);
-        }
-      });
+      this.pageActionPanelChromeWindow.removeEventListener("click", (evt) => this.handleChromeWindowClick(evt));
     }
     this.log.debug(`${panelType} has been dismissed by user due to ${details}.`);
     this.telemetry({
@@ -817,6 +889,13 @@ class Feature {
         "image",
         "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled");
       pageActionButton.addEventListener("command", (evt) => this.handlePageActionButtonCommand(evt, win));
+      CleanupManager.addCleanupHandler(() => {
+        try {
+          pageActionButton.removeEventListener("command", (evt) => this.handlePageActionButtonCommand(evt, win));
+        } catch (error) {
+          // pageActionButton has already been removed from the doc.
+        }
+      });
 
       urlbar.append(pageActionButton);
     }
@@ -920,16 +999,16 @@ class Feature {
     await this.studyUtils.endStudy({ reason });
   }
 
-  uninit() {
-    // ensure the frame script is not loaded into any new tabs
-    Services.mm.removeDelayedFrameScript(this.FRAME_SCRIPT_URL);
+  async uninit() {
 
     // Shutdown intro panel or pageAction panel, whichever is active
-    if (this.embeddedBrowser.contentWindow) {
+    if (this.embeddedBrowser) {
       this.embeddedBrowser.contentWindow.wrappedJSObject.onShutdown();
     }
 
-    // Remove listeners from all open windows.
+    await CleanupManager.cleanup();
+
+    // Remove added listeners and content from all open windows.
     const enumerator = Services.wm.getEnumerator("navigator:browser");
     while (enumerator.hasMoreElements()) {
       const win = enumerator.getNext();
@@ -937,52 +1016,16 @@ class Feature {
         continue;
       }
 
-      const panel = win.document.getElementById(`${this.PANEL_ID}`);
-      if (panel) {
-        this.removePanelListeners(panel);
-      }
-
       const button = win.document.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
       if (button) {
         button.removeEventListener("command", (evt) => this.handlePageActionButtonCommand(evt, win));
         button.parentElement.removeChild(button);
       }
-
-      const filter = {urls: new win.MatchPatternSet(["*://*/*"])};
-      WebRequest.onBeforeRequest.removeListener(
-        this.onBeforeRequestRef,
-        // listener will only be called for requests whose targets match the filter
-        filter,
-        ["blocking"]
-      );
-      win.gBrowser.removeTabsProgressListener(this);
-      win.gBrowser.tabContainer.removeEventListener("TabSelect", this.onTabChangeRef);
-
-      win.removeEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
-
-      Services.wm.removeListener(this);
     }
-
-    this.embeddedBrowser.removeEventListener(
-      "load",
-      this.handleEmbeddedBrowserLoadRef,
-      { capture: true }
-    );
-
-    this.pageActionPanelChromeWindow.removeEventListener("click", this.handleChromeWindowClickRef);
-
-    const uri = Services.io.newURI(this.STYLESHEET_URL);
-    styleSheetService.unregisterSheet(uri, styleSheetService.AGENT_SHEET);
 
     Cu.unload("resource://tracking-protection-study/Canonicalize.jsm");
     Cu.unload("resource://tracking-protection-study/BlockLists.jsm");
-
-    this.removeBuiltInTrackingProtectionListeners();
-  }
-
-  removePanelListeners(panel) {
-    panel.removeEventListener("popupshown", this.handlePopupShownRef);
-    panel.removeEventListener("popuphidden", this.handlePopupHiddenRef);
+    Cu.unload("resource://tracking-protection-study/CleanupManager.jsm");
   }
 
   resetBuiltInTrackingProtection() {
@@ -990,10 +1033,5 @@ class Feature {
       Services.prefs.setBoolPref(this.PREF_TP_ENABLED_GLOBALLY, false);
     }
     Services.prefs.setBoolPref(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, true);
-  }
-
-  removeBuiltInTrackingProtectionListeners() {
-    Services.prefs.removeObserver(this.PREF_TP_ENABLED_GLOBALLY, this);
-    Services.prefs.removeObserver(this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS, this);
   }
 }

@@ -181,22 +181,32 @@ this.Bootstrap = {
   async shutdown(addonData, reason) {
     this.log.debug("shutdown", this.REASONS[reason] || reason);
 
+    // In the case the UI was available already and the observe method never fired
+    try {
+      Services.obs.removeObserver(this, this.UI_AVAILABLE_NOTIFICATION);
+    } catch (err) {
+      // It must already be removed!
+    }
+
     const isUninstall = (reason === this.REASONS.ADDON_UNINSTALL
       || reason === this.REASONS.ADDON_DISABLE);
     if (isUninstall) {
       // Send this before the ShuttingDown event to ensure that message handlers
       // are still registered and receive it.
+      // Tells already loaded frame scripts to shutdown
       Services.mm.broadcastAsyncMessage("TrackingStudy:Uninstalling");
     }
 
+    // Tells already loaded frame scripts to shutdown
     Services.mm.broadcastAsyncMessage("TrackingStudy:ShuttingDown");
 
     if (isUninstall && !studyUtils._isEnding) {
       // we are the first 'uninstall' requestor => must be user action.
 
-      // remove custom pref for study duration
+      // remove custom pref for study duration and overrides
       Services.prefs.clearUserPref(this.EXPIRATION_DATE_STRING_PREF);
-      // TODO bdanforth: also remove treatment override pref (Issue #37)
+      Services.prefs.clearUserPref(this.DURATION_OVERRIDE_PREF);
+      Services.prefs.clearUserPref(this.VARIATION_OVERRIDE_PREF);
 
       // Study could end due to user ineligible or study expired, in which case feature is not initialized
       if (this.feature) {
