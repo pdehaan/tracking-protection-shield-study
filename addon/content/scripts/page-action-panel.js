@@ -1,50 +1,44 @@
 "use strict";
 
+let pageActionPanel;
+
 /* global sendMessageToChrome */
 
-/* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(onChromeListening|updateTPNumbers)" }]*/
-
-const pageActionPanel = document.getElementById("tracking-protection-study-page-action-panel-box");
-const pageActionButton = document.getElementById("tracking-protection-study-page-action-primary-button");
-const pageActionConfirmationPanel = document.getElementById("tracking-protection-study-page-action-confirmation-panel-box");
-const pageActionConfirmationCancelButton = document.getElementById("tracking-protection-study-confirmation-default-button");
-const pageActionConfirmationDisableButton = document.getElementById("tracking-protection-study-confirmation-secondary-button");
-const pageActionFirstQuantity = document.getElementById("tracking-protection-study-page-action-num-trackers-blocked");
-const pageActionSecondQuantity = document.getElementById("tracking-protection-study-page-action-second-quantity");
-const pageActionMessage = document.getElementById("tracking-protection-study-page-action-message");
-let msgParsed;
+/* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(onChromeListening|updateTPNumbers|onShutdown)" }]*/
 
 function onChromeListening(msg) {
-  msgParsed = JSON.parse(msg);
+  const msgParsed = JSON.parse(msg);
+  pageActionPanel = new PageActionPanel(msgParsed);
+}
 
-  if (document.readyState === "complete") {
-    handleLoad();
-  } else {
-    document.addEventListener("load", handleLoad);
+class PageActionPanel {
+  constructor(msg) {
+    this.msg = msg;
+
+    if (document.readyState === "complete") {
+      this.handleLoad();
+    } else {
+      this.handleLoadRef = this.handleLoad.bind(this);
+      document.addEventListener("load", this.handleLoadRef);
+    }
   }
 
-  function handleLoad() {
-    addCustomContent();
-    resizeBrowser(pageActionPanel);
+  handleLoad() {
+    this.pageActionPanel = document.getElementById("tracking-protection-study-page-action-panel-box");
+    this.pageActionButton = document.getElementById("tracking-protection-study-page-action-primary-button");
+    this.pageActionConfirmationPanel = document.getElementById("tracking-protection-study-page-action-confirmation-panel-box");
+    this.pageActionConfirmationCancelButton = document.getElementById("tracking-protection-study-confirmation-default-button");
+    this.pageActionConfirmationDisableButton = document.getElementById("tracking-protection-study-confirmation-secondary-button");
+    this.pageActionFirstQuantity = document.getElementById("tracking-protection-study-page-action-num-trackers-blocked");
+    this.pageActionSecondQuantity = document.getElementById("tracking-protection-study-page-action-second-quantity");
+    this.pageActionMessage = document.getElementById("tracking-protection-study-page-action-message");
+    this.addCustomContent();
+    this.resizeBrowser(this.pageActionPanel);
+    this.addClickListeners();
   }
 
-  // This is only called when the pageAction panel goes from not showing to showing
-  // it does not live update the values
-  function addCustomContent() {
-    pageActionFirstQuantity.innerText = msgParsed.firstQuantity;
-    let secondQuantityMessage = msgParsed.pageActionQuantities;
-    // convert time units
-    const { timeSaved, timeUnit } = getHumanReadableTime(msgParsed.secondQuantity);
-    const blockedAds = msgParsed.secondQuantity;
-    secondQuantityMessage = secondQuantityMessage.replace("${blockedAds}", blockedAds);
-    secondQuantityMessage = secondQuantityMessage.replace("${timeSaved}", timeSaved);
-    secondQuantityMessage = secondQuantityMessage.replace("${timeUnit}", timeUnit);
-    pageActionSecondQuantity.innerHTML = secondQuantityMessage;
-    pageActionMessage.textContent = msgParsed.pageActionMessage;
-  }
-
-  function resizeBrowser(panel) {
-    const dimensions = getPanelDimensions(panel);
+  resizeBrowser(panel) {
+    const dimensions = this.getPanelDimensions(panel);
     sendMessageToChrome(
       "browser-resize",
       JSON.stringify(dimensions)
@@ -52,30 +46,48 @@ function onChromeListening(msg) {
   }
 
   // get width and height of panel after it's loaded
-  function getPanelDimensions(panel) {
+  getPanelDimensions(panel) {
     // get the DOMRect object of panel element, not JSON-able
     const dimensions = panel.getBoundingClientRect();
     return { width: dimensions.width, height: dimensions.height };
   }
 
-  pageActionButton.addEventListener("click", handleButtonClick);
-  pageActionConfirmationCancelButton.addEventListener("click", handleButtonClick);
-  pageActionConfirmationDisableButton.addEventListener("click", handleButtonClick);
+  // This is only called when the pageAction panel goes from not showing to showing
+  // it does not live update the values
+  addCustomContent() {
+    this.pageActionFirstQuantity.innerText = this.msg.firstQuantity;
+    let secondQuantityMessage = this.msg.pageActionQuantities;
+    // convert time units
+    const { timeSaved, timeUnit } = this.getHumanReadableTime(this.msg.secondQuantity);
+    const blockedAds = this.msg.secondQuantity;
+    secondQuantityMessage = secondQuantityMessage.replace("${blockedAds}", blockedAds);
+    secondQuantityMessage = secondQuantityMessage.replace("${timeSaved}", timeSaved);
+    secondQuantityMessage = secondQuantityMessage.replace("${timeUnit}", timeUnit);
+    this.pageActionSecondQuantity.innerHTML = secondQuantityMessage;
+    this.pageActionMessage.textContent = this.msg.pageActionMessage;
+  }
 
-  function handleButtonClick(evt) {
+  addClickListeners() {
+    this.handleButtonClickRef = this.handleButtonClick.bind(this);
+    this.pageActionButton.addEventListener("click", this.handleButtonClickRef);
+    this.pageActionConfirmationCancelButton.addEventListener("click", this.handleButtonClickRef);
+    this.pageActionConfirmationDisableButton.addEventListener("click", this.handleButtonClickRef);
+  }
+
+  handleButtonClick(evt) {
     let event;
     switch (evt.target.id) {
       case "tracking-protection-study-page-action-primary-button":
         event = "page-action-reject";
-        pageActionPanel.classList.add("hidden");
-        pageActionConfirmationPanel.classList.remove("hidden");
-        resizeBrowser(pageActionConfirmationPanel);
+        this.pageActionPanel.classList.add("hidden");
+        this.pageActionConfirmationPanel.classList.remove("hidden");
+        this.resizeBrowser(this.pageActionConfirmationPanel);
         break;
       case "tracking-protection-study-confirmation-default-button":
         event = "page-action-confirmation-cancel";
-        pageActionConfirmationPanel.classList.add("hidden");
-        pageActionPanel.classList.remove("hidden");
-        resizeBrowser(pageActionPanel);
+        this.pageActionConfirmationPanel.classList.add("hidden");
+        this.pageActionPanel.classList.remove("hidden");
+        this.resizeBrowser(this.pageActionPanel);
         break;
       case "tracking-protection-study-confirmation-secondary-button":
         event = "page-action-confirmation-leave-study";
@@ -85,39 +97,58 @@ function onChromeListening(msg) {
     }
     sendMessageToChrome(event);
   }
-}
 
-function getHumanReadableTime(perPageTimeSaved) {
-  let timeSaved = "";
-  let timeUnit = "";
-  const timeSeconds = perPageTimeSaved / 1000;
-  if (timeSeconds >= 60) {
-    const timeMinutes = timeSeconds / 60;
-    timeSaved += `${timeMinutes.toFixed(2)}`;
-    timeUnit += "minute";
-    if (timeMinutes > 1) {
-      timeUnit += "s";
+  getHumanReadableTime(perPageTimeSaved) {
+    let timeSaved = "";
+    let timeUnit = "";
+    const timeSeconds = perPageTimeSaved / 1000;
+    if (timeSeconds >= 60) {
+      const timeMinutes = timeSeconds / 60;
+      timeSaved += `${timeMinutes.toFixed(2)}`;
+      timeUnit += "minute";
+      if (timeMinutes > 1) {
+        timeUnit += "s";
+      }
+    } else {
+      timeSaved += `${Math.round(timeSeconds)}`;
+      timeUnit += "second";
+      if (Math.round(timeSeconds) !== 1) {
+        timeUnit += "s";
+      }
     }
-  } else {
-    timeSaved += `${Math.round(timeSeconds)}`;
-    timeUnit += "second";
-    if (Math.round(timeSeconds) !== 1) {
-      timeUnit += "s";
-    }
+    return { timeSaved, timeUnit };
   }
-  return { timeSaved, timeUnit };
+
+  updateNumbers(quantities) {
+    quantities = JSON.parse(quantities);
+    const firstQuantity = quantities.firstQuantity;
+    const { timeSaved, timeUnit } = this.getHumanReadableTime(quantities.secondQuantity);
+    const blockedAds = quantities.secondQuantity;
+    this.pageActionFirstQuantity.innerText = firstQuantity;
+    let secondQuantityHTML = this.msg.pageActionQuantities;
+    secondQuantityHTML = secondQuantityHTML.replace("${blockedAds}", blockedAds);
+    secondQuantityHTML = secondQuantityHTML.replace("${timeSaved}", timeSaved);
+    secondQuantityHTML = secondQuantityHTML.replace("${timeUnit}", timeUnit);
+    this.pageActionSecondQuantity.innerHTML = secondQuantityHTML;
+  }
+
+  onShutdown() {
+    document.removeEventListener("load", this.handleLoadRef);
+    this.removeClickListeners();
+  }
+
+  removeClickListeners() {
+    this.pageActionButton.removeEventListener("click", this.handleButtonClickRef);
+    this.pageActionConfirmationCancelButton.removeEventListener("click", this.handleButtonClickRef);
+    this.pageActionConfirmationDisableButton.removeEventListener("click", this.handleButtonClickRef);
+  }
 }
 
 // Update quantities dynamically without refreshing the pageAction panel
 function updateTPNumbers(quantities) {
-  quantities = JSON.parse(quantities);
-  const firstQuantity = quantities.firstQuantity;
-  const { timeSaved, timeUnit } = getHumanReadableTime(quantities.secondQuantity);
-  const blockedAds = quantities.secondQuantity;
-  pageActionFirstQuantity.innerText = firstQuantity;
-  let secondQuantityHTML = msgParsed.pageActionQuantities;
-  secondQuantityHTML = secondQuantityHTML.replace("${blockedAds}", blockedAds);
-  secondQuantityHTML = secondQuantityHTML.replace("${timeSaved}", timeSaved);
-  secondQuantityHTML = secondQuantityHTML.replace("${timeUnit}", timeUnit);
-  pageActionSecondQuantity.innerHTML = secondQuantityHTML;
+  pageActionPanel.updateNumbers(quantities);
+}
+
+function onShutdown() {
+  pageActionPanel.onShutdown();
 }

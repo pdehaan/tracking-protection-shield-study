@@ -4,8 +4,8 @@
 #
 # - Create addon/{install.rdf,chrome.manifest} from templates,
 #   using data from package.json
-# -
-# Create dist/{$XPI_NAME,linked-addon.xpi}
+# - Create dist/{$XPI_NAME,linked-addon.xpi}
+# - Create ${ADDON_ID}/ folder with contents based on 'build-includes.txt' to test in tree
 
 
 
@@ -27,7 +27,6 @@ $mustache package.json templates/install.rdf.mustache > addon/install.rdf
 $mustache package.json templates/chrome.manifest.mustache > addon/chrome.manifest
 
 echo 'Copying all files in `addon/` into the xpi...'
-
 # xpi all of 'addon' to 'dist'
 mkdir -p dist
 
