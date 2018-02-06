@@ -4,7 +4,7 @@
 
 "use strict";
 
-/* global blocklists CleanupManager */
+/* global blocklists CleanupManager WindowWatcher */
 /* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(EXPORTED_SYMBOLS|Feature)" }]*/
 
 /**  What this Feature does: TODO bdanforth: complete
@@ -44,6 +44,8 @@ XPCOMUtils.defineLazyModuleGetter(this, "blocklists",
   `resource://${STUDY}/lib/BlockLists.jsm`);
 XPCOMUtils.defineLazyModuleGetter(this, "CleanupManager",
   `resource://${STUDY}/lib/CleanupManager.jsm`);
+XPCOMUtils.defineLazyModuleGetter(this, "WindowWatcher",
+  `resource://${STUDY}/lib/WindowWatcher.jsm`);
 
 const EXPORTED_SYMBOLS = ["Feature"];
 
@@ -298,20 +300,151 @@ class Feature {
     const uri = Services.io.newURI(this.STYLESHEET_URL);
     styleSheetService.loadAndRegisterSheet(uri, styleSheetService.AGENT_SHEET);
     CleanupManager.addCleanupHandler(() => styleSheetService.unregisterSheet(uri, styleSheetService.AGENT_SHEET));
-    // 4.3 Add listeners to all open windows to know when to update pageAction
-    const enumerator = Services.wm.getEnumerator("navigator:browser");
-    while (enumerator.hasMoreElements()) {
-      win = enumerator.getNext();
-      if (win === Services.appShell.hiddenDOMWindow) {
-        continue;
-      }
-      this.addWindowEventListeners(win);
-    }
-    // 4.4 Add listeners to all new windows to know when to update pageAction.
+    // load content into existing windows and listen for new windows to load content in
+    WindowWatcher.start(this.loadIntoWindow.bind(this), this.unloadFromWindow.bind(this), this.onWindowError.bind(this));
+  }
+
+  loadIntoWindow(win) {
+    // Add listeners to all open windows to know when to update pageAction
+    this.addWindowEventListeners(win);
+    // Add listeners to all new windows to know when to update pageAction.
     // Depending on which event happens (ex: onOpenWindow, onLocationChange),
     // it will call that listener method that exists on "this"
     Services.wm.addListener(this);
-    CleanupManager.addCleanupHandler(() => Services.wm.removeListener(this));
+  }
+
+  unloadFromWindow(win) {
+    this.removeWindowEventListeners(win);
+    Services.wm.removeListener(this);
+    const button = win.document.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
+    if (button) {
+      button.removeEventListener("command", (evt) => this.handlePageActionButtonCommand(evt, win));
+      button.parentElement.removeChild(button);
+    }
+  }
+
+  onWindowError(msg) {
+    this.log.debug(msg);
+  }
+
+  /**
+  * Three cases of user looking at diff page:
+      - switched windows (onOpenWindow)
+      - loading new pages in the same tab (on page load in frame script)
+      - switching tabs but not switching windows (tabSelect)
+    Each one needs its own separate handler, because each one is detected by its
+    own separate event.
+  * @param {ChromeWindow} win
+  */
+  addWindowEventListeners(win) {
+    if (win && win.gBrowser) {
+      win.gBrowser.addTabsProgressListener(this);
+      win.gBrowser.tabContainer.addEventListener(
+        "TabSelect",
+        (evt) => this.onTabChange(evt),
+      );
+      // handle the case where the window closed, but intro or pageAction panel
+      // is still open.
+      win.addEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
+    }
+  }
+
+  removeWindowEventListeners(win) {
+    if (win && win.gBrowser) {
+      win.gBrowser.removeTabsProgressListener(this);
+      win.gBrowser.tabContainer.removeEventListener(
+        "TabSelect",
+        (evt) => this.onTabChange(evt),
+      );
+      win.removeEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
+    }
+  }
+
+  handleWindowClosing(win) {
+    if (this.state.introPanelIsShowing && win === this.introPanelChromeWindow) {
+      this.hidePanel("window-close", true);
+    }
+    if (this.state.pageActionPanelIsShowing && win === this.pageActionPanelChromeWindow) {
+      this.hidePanel("window-close", false);
+    }
+  }
+
+  // This method is called when opening a new tab among many other times.
+  // This is a listener for the addTabsProgressListener
+  // Not appropriate for modifying the page itself because the page hasn't
+  // finished loading yet. More info: https://tinyurl.com/lpzfbpj
+  onLocationChange(browser, progress, request, uri, flags) {
+    // only show pageAction icon and panels on http(s) pages
+    if (uri.scheme !== "http" && uri.scheme !== "https") {
+      return;
+    }
+
+    const LOCATION_CHANGE_SAME_DOCUMENT = 1;
+    // ensure the location change event is occuring in the top frame (not an
+    // iframe for example) and also that a different page is being loaded
+    if (progress.isTopLevel && flags !== LOCATION_CHANGE_SAME_DOCUMENT) {
+      this.showPageAction(browser.getRootNode());
+      this.setPageActionCounter(browser.getRootNode(), 0);
+      this.state.blockedResources.set(browser, 0);
+      this.state.blockedAds.set(browser, 0);
+      this.state.timeSaved.set(browser, 0);
+
+      // Hide intro panel on location change in the same tab if showing
+      if (this.state.introPanelIsShowing && this.introPanelBrowser === browser) {
+        this.hidePanel("location-change-same-tab", true);
+      }
+      if (this.state.pageActionPanelIsShowing) {
+        this.hidePanel("location-change-same-tab", false);
+      }
+    }
+
+    if (this.shouldShowIntroPanel) {
+      this.introPanelBrowser = browser;
+    }
+  }
+
+  /**
+  * Called when a non-focused tab is selected.
+  * If have CNN in one tab (with blocked elements) and Fox in another, go to 
+  * Fox tab and back to CNN, you want counter to change back to CNN count.
+  * Only one icon in URL across all tabs, have to update it per page.
+  */
+  onTabChange(evt) {
+    // Hide intro panel on tab change if showing
+    if (this.state.introPanelIsShowing) {
+      this.hidePanel("tab-change", true);
+    }
+
+    if (this.state.pageActionPanelIsShowing) {
+      this.hidePanel("tab-change", false);
+    }
+
+    const win = evt.target.ownerGlobal;
+    const currentURI = win.gBrowser.currentURI;
+
+    // Only show pageAction on http(s) pages
+    if (currentURI.scheme !== "http" && currentURI.scheme !== "https") {
+      this.hidePageAction(win.document);
+      return;
+    }
+
+    const currentWin = Services.wm.getMostRecentWindow("navigator:browser");
+
+    // If user changes tabs but stays within current window we want to update
+    // the status of the pageAction, then reshow it if the new page has had any
+    // resources blocked.
+    if (win === currentWin) {
+      // depending on the treatment branch, we want the count of timeSaved
+      // ("fast") or blockedResources ("private")
+      let counter = this.treatment === "private" ?
+        this.state.blockedResources.get(win.gBrowser.selectedBrowser) :
+        this.state.timeSaved.get(win.gBrowser.selectedBrowser);
+      if (!counter) {
+        counter = 0;
+      }
+      this.showPageAction(win.document);
+      this.setPageActionCounter(win.document, counter);
+    }
   }
 
   /**
@@ -601,123 +734,6 @@ class Feature {
     });
   }
 
-  /**
-  * Three cases of user looking at diff page:
-      - switched windows (onOpenWindow)
-      - loading new pages in the same tab (on page load in frame script)
-      - switching tabs but not switching windows (tabSelect)
-    Each one needs its own separate handler, because each one is detected by its
-    own separate event.
-  * @param {ChromeWindow} win
-  */
-  addWindowEventListeners(win) {
-    if (win && win.gBrowser) {
-      win.gBrowser.addTabsProgressListener(this);
-      CleanupManager.addCleanupHandler(() => {
-        try {
-          win.gBrowser.removeTabsProgressListener(this);
-        } catch (error) {
-          // the window has likely been closed already
-        }
-      });
-      const onTabChangeRef = this.onTabChange.bind(this);
-      win.gBrowser.tabContainer.addEventListener(
-        "TabSelect",
-        onTabChangeRef
-      );
-      CleanupManager.addCleanupHandler(() => {
-        try {
-          win.gBrowser.tabContainer.removeEventListener(
-            "TabSelect",
-            onTabChangeRef
-          );
-        } catch (error) {
-          // the window has likely been closed already
-        }
-      });
-      // handle the case where the window closed, but intro or pageAction panel
-      // is still open.
-      win.addEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
-      CleanupManager.addCleanupHandler(() => {
-        try {
-          win.removeEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
-        } catch (error) {
-          // the window has likely been closed already
-        }
-      });
-    }
-  }
-
-  handleWindowClosing(win) {
-    if (this.state.introPanelIsShowing && win === this.introPanelChromeWindow) {
-      this.hidePanel("window-close", true);
-    }
-    if (this.state.pageActionPanelIsShowing && win === this.pageActionPanelChromeWindow) {
-      this.hidePanel("window-close", false);
-    }
-  }
-
-  // This method is called if event occurs from:
-  // Services.wm.addListener(this)
-  // Adds event listeners to newly created windows (browser application window)
-  // This method is NOT called when opening a new tab.
-  onOpenWindow(xulWindow) {
-
-    // win is a chromeWindow
-    var win = xulWindow.QueryInterface(Ci.nsIInterfaceRequestor)
-      .getInterface(Ci.nsIDOMWindowInternal || Ci.nsIDOMWindow);
-    win.addEventListener(
-      "load",
-      () => this.addWindowEventListeners(win),
-      {once: true}
-    );
-    CleanupManager.addCleanupHandler(() => {
-      try {
-        win.removeEventListener(
-          "load",
-          () => this.addWindowEventListeners(win),
-          {once: true}
-        );
-      } catch (error) {
-        // the window has likely been closed already
-      }
-    });
-  }
-
-  // This method is called when opening a new tab among many other times.
-  // This is a listener for the addTabsProgressListener
-  // Not appropriate for modifying the page itself because the page hasn't
-  // finished loading yet. More info: https://tinyurl.com/lpzfbpj
-  onLocationChange(browser, progress, request, uri, flags) {
-    // only show pageAction icon and panels on http(s) pages
-    if (uri.scheme !== "http" && uri.scheme !== "https") {
-      return;
-    }
-
-    const LOCATION_CHANGE_SAME_DOCUMENT = 1;
-    // ensure the location change event is occuring in the top frame (not an
-    // iframe for example) and also that a different page is being loaded
-    if (progress.isTopLevel && flags !== LOCATION_CHANGE_SAME_DOCUMENT) {
-      this.showPageAction(browser.getRootNode());
-      this.setPageActionCounter(browser.getRootNode(), 0);
-      this.state.blockedResources.set(browser, 0);
-      this.state.blockedAds.set(browser, 0);
-      this.state.timeSaved.set(browser, 0);
-
-      // Hide intro panel on location change in the same tab if showing
-      if (this.state.introPanelIsShowing && this.introPanelBrowser === browser) {
-        this.hidePanel("location-change-same-tab", true);
-      }
-      if (this.state.pageActionPanelIsShowing) {
-        this.hidePanel("location-change-same-tab", false);
-      }
-    }
-
-    if (this.shouldShowIntroPanel) {
-      this.introPanelBrowser = browser;
-    }
-  }
-
   hidePanel(details, isIntroPanel) {
     const panelType = isIntroPanel ? "introduction-panel" : "page-action-panel";
     const panel = isIntroPanel ? this.introPanel : this.pageActionPanel;
@@ -947,50 +963,6 @@ class Feature {
     }
   }
 
-  /**
-  * Called when a non-focused tab is selected.
-  * If have CNN in one tab (with blocked elements) and Fox in another, go to 
-  * Fox tab and back to CNN, you want counter to change back to CNN count.
-  * Only one icon in URL across all tabs, have to update it per page.
-  */
-  onTabChange(evt) {
-    // Hide intro panel on tab change if showing
-    if (this.state.introPanelIsShowing) {
-      this.hidePanel("tab-change", true);
-    }
-
-    if (this.state.pageActionPanelIsShowing) {
-      this.hidePanel("tab-change", false);
-    }
-
-    const win = evt.target.ownerGlobal;
-    const currentURI = win.gBrowser.currentURI;
-
-    // Only show pageAction on http(s) pages
-    if (currentURI.scheme !== "http" && currentURI.scheme !== "https") {
-      this.hidePageAction(win.document);
-      return;
-    }
-
-    const currentWin = Services.wm.getMostRecentWindow("navigator:browser");
-
-    // If user changes tabs but stays within current window we want to update
-    // the status of the pageAction, then reshow it if the new page has had any
-    // resources blocked.
-    if (win === currentWin) {
-      // depending on the treatment branch, we want the count of timeSaved
-      // ("fast") or blockedResources ("private")
-      let counter = this.treatment === "private" ?
-        this.state.blockedResources.get(win.gBrowser.selectedBrowser) :
-        this.state.timeSaved.get(win.gBrowser.selectedBrowser);
-      if (!counter) {
-        counter = 0;
-      }
-      this.showPageAction(win.document);
-      this.setPageActionCounter(win.document, counter);
-    }
-  }
-
   async endStudy(reason, shouldResetTP = true) {
     this.isStudyEnding = true;
     if (shouldResetTP) {
@@ -1001,31 +973,32 @@ class Feature {
 
   async uninit() {
 
-    // Shutdown intro panel or pageAction panel, whichever is active
+    // Shutdown intro panel or pageAction panel, if either is active
     if (this.embeddedBrowser) {
-      this.embeddedBrowser.contentWindow.wrappedJSObject.onShutdown();
+      try {
+        this.embeddedBrowser.contentWindow.wrappedJSObject.onShutdown();
+      } catch (error) {
+        // the <browser> element must have already been removed from the chrome
+      }
     }
 
+    // Remove all listeners from existing windows and stop listening for new windows
+    WindowWatcher.stop();
+
+    // Remove all listeners from other objects like tabs, <panels> and <browser>s
     await CleanupManager.cleanup();
 
-    // Remove added listeners and content from all open windows.
-    const enumerator = Services.wm.getEnumerator("navigator:browser");
-    while (enumerator.hasMoreElements()) {
-      const win = enumerator.getNext();
-      if (win === Services.appShell.hiddenDOMWindow) {
-        continue;
-      }
+    // Remove all references to DOMWindow objects and their descendants
+    this.introPanel = null;
+    this.introPanelChromeWindow = null;
+    this.pageActionPanel = null;
+    this.pageActionPanelChromeWindow = null;
+    this.embeddedBrowser = null;
 
-      const button = win.document.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
-      if (button) {
-        button.removeEventListener("command", (evt) => this.handlePageActionButtonCommand(evt, win));
-        button.parentElement.removeChild(button);
-      }
-    }
-
-    Cu.unload("resource://tracking-protection-study/Canonicalize.jsm");
-    Cu.unload("resource://tracking-protection-study/BlockLists.jsm");
-    Cu.unload("resource://tracking-protection-study/CleanupManager.jsm");
+    Cu.unload(`resource://${STUDY}/lib/Canonicalize.jsm`);
+    Cu.unload(`resource://${STUDY}/lib/BlockLists.jsm`);
+    Cu.unload(`resource://${STUDY}/lib/CleanupManager.jsm`);
+    Cu.unload(`resource://${STUDY}/lib/WindowWatcher.jsm`);
   }
 
   resetBuiltInTrackingProtection() {
