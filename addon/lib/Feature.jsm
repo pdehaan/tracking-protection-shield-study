@@ -288,7 +288,6 @@ class Feature {
     // ensure the frame script is not loaded into any new tabs on shutdown,
     // existing frame scripts already loaded are handled by the bootstrap shutdown method
     CleanupManager.addCleanupHandler(() => Services.mm.removeDelayedFrameScript(this.FRAME_SCRIPT_URL));
-
     // 4. Add pageAction icon and pageAction panel; this is the complicated part
     await this.addPageActionAndPanel(win);
   }
@@ -310,17 +309,17 @@ class Feature {
     // Add listeners to all new windows to know when to update pageAction.
     // Depending on which event happens (ex: onOpenWindow, onLocationChange),
     // it will call that listener method that exists on "this"
-    Services.wm.addListener(this);
+    // Services.wm.addListener(this);
   }
 
   unloadFromWindow(win) {
     this.removeWindowEventListeners(win);
-    Services.wm.removeListener(this);
-    const button = win.document.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
-    if (button) {
-      button.removeEventListener("command", (evt) => this.handlePageActionButtonCommand(evt, win));
-      button.parentElement.removeChild(button);
-    }
+    // Services.wm.removeListener(this);
+    // const button = win.document.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
+    // if (button) {
+    //   button.removeEventListener("command", (evt) => this.handlePageActionButtonCommand(evt, win));
+    //   button.parentElement.removeChild(button);
+    // }
   }
 
   onWindowError(msg) {
@@ -339,24 +338,24 @@ class Feature {
   addWindowEventListeners(win) {
     if (win && win.gBrowser) {
       win.gBrowser.addTabsProgressListener(this);
-      win.gBrowser.tabContainer.addEventListener(
-        "TabSelect",
-        (evt) => this.onTabChange(evt),
-      );
-      // handle the case where the window closed, but intro or pageAction panel
-      // is still open.
-      win.addEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
+      // win.gBrowser.tabContainer.addEventListener(
+      //   "TabSelect",
+      //   (evt) => this.onTabChange(evt),
+      // );
+      // // handle the case where the window closed, but intro or pageAction panel
+      // // is still open.
+      // win.addEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
     }
   }
 
   removeWindowEventListeners(win) {
     if (win && win.gBrowser) {
       win.gBrowser.removeTabsProgressListener(this);
-      win.gBrowser.tabContainer.removeEventListener(
-        "TabSelect",
-        (evt) => this.onTabChange(evt),
-      );
-      win.removeEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
+      // win.gBrowser.tabContainer.removeEventListener(
+      //   "TabSelect",
+      //   (evt) => this.onTabChange(evt),
+      // );
+      // win.removeEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
     }
   }
 

@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-// Modified from https://github.com/mozilla/universal-search/blob/fb3ae049d290f56ea7f3ab7a857273376d9232d8/lib/window-watcher.js
+// Modified from https://github.com/Mardak/restartless/blob/watchWindows/bootstrap.js
 
 /* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(EXPORTED_SYMBOLS|WindowWatcher)" }]*/
 
@@ -36,10 +36,11 @@ const WindowWatcher = {
 
   _errback: null,
 
-
   // It is expected that loadCallback, unloadCallback, and errback are bound
   // to a `this` value.
   start(loadCallback, unloadCallback, errback) {
+    this.initLog("debug");
+
     if (this._isActive) {
       this._onError("Called start, but WindowWatcher was already running");
       return;
@@ -50,6 +51,7 @@ const WindowWatcher = {
     this._unloadCallback = unloadCallback;
     this._errback = errback;
 
+    // Add loadCallback to existing windows
     const windows = Services.wm.getEnumerator("navigator:browser");
     while (windows.hasMoreElements()) {
       const win = windows.getNext();
@@ -63,7 +65,9 @@ const WindowWatcher = {
       }
     }
 
-    Services.ww.registerNotification(this._onWindowOpened);
+    // Add loadCallback to future windows
+    // This will call the observe method on WindowWatcher
+    Services.ww.registerNotification(this);
   },
 
   stop() {
@@ -82,7 +86,8 @@ const WindowWatcher = {
       }
     }
 
-    Services.ww.unregisterNotification(this._onWindowOpened);
+    // This will call the observe method on WindowWatcher
+    Services.ww.unregisterNotification(this);
 
     this._loadCallback = null;
     this._unloadCallback = null;
@@ -90,14 +95,26 @@ const WindowWatcher = {
     this._isActive = false;
   },
 
-  _onWindowOpened(win, topic) {
-    if (topic === "domwindowopened") {
-      win.addEventListener("load", this._onWindowLoaded);
+  observe(win, topic) {
+    switch (topic) {
+      case "domwindowopened":
+        this._onWindowOpened(win);
+        break;
+      case "domwindowclosed":
+        this._onWindowClosed(win);
+        break;
+      default:
+        break;
     }
   },
 
-  _onWindowLoaded(evt) {
-    const win = evt.target.ownerGlobal;
+  _onWindowOpened(win) {
+    this._onWindowLoaded = this._onWindowLoaded.bind(this, win);
+    win.addEventListener("load", this._onWindowLoaded);
+  },
+
+  _onWindowLoaded(win) {
+    // const win = evt.target.ownerGlobal;
     win.removeEventListener("load", this._onWindowLoaded);
 
     // This is a way of checking if the just loaded window is a DOMWindow.
@@ -108,7 +125,29 @@ const WindowWatcher = {
     }
   },
 
+  _onWindowClosed(win) {
+    if (win.location.href === "chrome://browser/content/browser.xul") {
+      this._unloadCallback(win);
+    }
+  },
+
   _onError(msg) {
     this._errback(msg);
+  },
+
+  /*
+  * Create a new instance of the ConsoleAPI, so we can control
+  * the maxLogLevel with Config.jsm.
+  */
+  initLog(logLevel) {
+    XPCOMUtils.defineLazyGetter(this, "log", () => {
+      const ConsoleAPI =
+        Cu.import("resource://gre/modules/Console.jsm", {}).ConsoleAPI;
+      const consoleOptions = {
+        maxLogLevel: logLevel,
+        prefix: "TPStudy",
+      };
+      return new ConsoleAPI(consoleOptions);
+    });
   },
 };
