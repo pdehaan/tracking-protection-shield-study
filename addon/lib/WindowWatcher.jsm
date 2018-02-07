@@ -27,14 +27,14 @@ The WindowWatcher is used by the main Feature module to manage the
 add-on lifecycle.
 */
 
-const WindowWatcher = {
-  _isActive: false,
-
-  _loadCallback: null,
-
-  _unloadCallback: null,
-
-  _errback: null,
+class WindowWatcherClass {
+  constructor() {
+    this._isActive = false;
+    this._loadCallback = null;
+    this._unloadCallback = null;
+    this._errback = null;
+    this._onWindowLoadedRef = this._onWindowLoaded.bind(this);
+  }
 
   // It is expected that loadCallback, unloadCallback, and errback are bound
   // to a `this` value.
@@ -68,7 +68,7 @@ const WindowWatcher = {
     // Add loadCallback to future windows
     // This will call the observe method on WindowWatcher
     Services.ww.registerNotification(this);
-  },
+  }
 
   stop() {
     if (!this._isActive) {
@@ -93,7 +93,7 @@ const WindowWatcher = {
     this._unloadCallback = null;
     this._errback = null;
     this._isActive = false;
-  },
+  }
 
   observe(win, topic) {
     switch (topic) {
@@ -106,34 +106,34 @@ const WindowWatcher = {
       default:
         break;
     }
-  },
+  }
 
   _onWindowOpened(win) {
-    this._onWindowLoaded = this._onWindowLoaded.bind(this, win);
-    win.addEventListener("load", this._onWindowLoaded);
-  },
+    win.addEventListener("load", this._onWindowLoadedRef);
+  }
 
-  _onWindowLoaded(win) {
-    // const win = evt.target.ownerGlobal;
-    win.removeEventListener("load", this._onWindowLoaded);
+  _onWindowLoaded(evt) {
+    const win = evt.target.ownerGlobal;
+    win.removeEventListener("load", this._onWindowLoadedRef);
 
-    // This is a way of checking if the just loaded window is a DOMWindow.
-    // We don't want to load our code into other types of windows.
-    // There may be cleaner / more reliable approaches.
-    if (win.location.href === "chrome://browser/content/browser.xul") {
+    // make sure we only add window listeners to a DOMWindow (browser.xul)
+    const winType = win.document.documentElement.getAttribute("windowtype");
+    if (winType === "navigator:browser") {
       this._loadCallback(win);
     }
-  },
+  }
 
   _onWindowClosed(win) {
-    if (win.location.href === "chrome://browser/content/browser.xul") {
+    // make sure we only remove window listeners from a DOMWindow (browser.xul)
+    const winType = win.document.documentElement.getAttribute("windowtype");
+    if (winType === "navigator:browser") {
       this._unloadCallback(win);
     }
-  },
+  }
 
   _onError(msg) {
     this._errback(msg);
-  },
+  }
 
   /*
   * Create a new instance of the ConsoleAPI, so we can control
@@ -149,5 +149,7 @@ const WindowWatcher = {
       };
       return new ConsoleAPI(consoleOptions);
     });
-  },
-};
+  }
+}
+
+const WindowWatcher = new WindowWatcherClass();
