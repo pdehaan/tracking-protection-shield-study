@@ -14,11 +14,12 @@ function onChromeListening(msg) {
 class PageActionPanel {
   constructor(msg) {
     this.msg = msg;
+    this.handleLoadRef = this.handleLoad.bind(this);
+    this.handleButtonClickRef = this.handleButtonClick.bind(this);
 
     if (document.readyState === "complete") {
       this.handleLoad();
     } else {
-      this.handleLoadRef = this.handleLoad.bind(this);
       document.addEventListener("load", this.handleLoadRef);
     }
   }
@@ -68,7 +69,6 @@ class PageActionPanel {
   }
 
   addClickListeners() {
-    this.handleButtonClickRef = this.handleButtonClick.bind(this);
     this.pageActionButton.addEventListener("click", this.handleButtonClickRef);
     this.pageActionConfirmationCancelButton.addEventListener("click", this.handleButtonClickRef);
     this.pageActionConfirmationDisableButton.addEventListener("click", this.handleButtonClickRef);

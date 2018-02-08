@@ -40,6 +40,8 @@ this.Bootstrap = {
 
     // choose and set variation
     const variation = await this.selectVariation();
+    this.variation = variation;
+    this.reason = reason;
 
     // if addon was just installed, check if user is eligible
     if ((this.REASONS[reason]) === "ADDON_INSTALL") {
@@ -76,7 +78,7 @@ this.Bootstrap = {
       Services.obs.addObserver(this, this.UI_AVAILABLE_NOTIFICATION);
     } else {
       // TODO bdanforth: check if window is private before adding UI
-      this.addFeature(variation, reason);
+      this.addFeature(this.variation, this.reason);
     }
   },
 
@@ -160,7 +162,7 @@ this.Bootstrap = {
   observe(subject, topic, data) {
     if (topic === this.UI_AVAILABLE_NOTIFICATION) {
       Services.obs.removeObserver(this, this.UI_AVAILABLE_NOTIFICATION);
-      this.addFeature();
+      this.addFeature(this.variation, this.reason);
     }
   },
 

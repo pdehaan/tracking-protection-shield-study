@@ -61,7 +61,7 @@ class WindowWatcherClass {
       try {
         this._loadCallback(win);
       } catch (ex) {
-        this._onError("WindowWatcher code loading callback failed: ", ex);
+        this._onError(`WindowWatcher code loading callback failed: ${ex}`);
       }
     }
 

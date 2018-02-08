@@ -78,6 +78,16 @@ class Feature {
     this.AD_FRACTION = 0.1;
     // Time saved per page will never exceed this fraction of # blocked resources
     this.MAX_TIME_SAVED_FRACTION = 0.075;
+
+    this.onTabChangeRef = this.onTabChange.bind(this);
+    this.handlePageActionButtonCommandRef = this.handlePageActionButtonCommand.bind(this);
+    this.handleWindowClosingRef = this.handleWindowClosing.bind(this);
+    this.handleEmbeddedBrowserLoadRef = this.handleEmbeddedBrowserLoad.bind(this);
+    this.handlePopupShownRef = this.handlePopupShown.bind(this);
+    this.handlePopupHiddenRef = this.handlePopupHidden.bind(this);
+    this.onBeforeRequestRef = this.onBeforeRequest.bind(this);
+    this.handleChromeWindowClickRef = this.handleChromeWindowClick.bind(this);
+
     this.init(logLevel);
   }
 
@@ -128,15 +138,15 @@ class Feature {
     this.state = {
       totalTimeSaved: 0,
       // a <browser>:counter map for the number of milliseconds saved for a particular browser
-      timeSaved: new Map(),
+      timeSaved: new WeakMap(),
       // a <browser>:counter map for the number of blocked resources for a particular browser
       // Why is this mapped with <browser>?
       // You may have the same site in multiple tabs; should you use the same counter for both?
       // the <browser> element is per tab. Fox News in two different tabs wouldn't share the same counter.
       // if didn't do this, you might get two tabs loading the same page trying to update the same counter.
-      blockedResources: new Map(),
+      blockedResources: new WeakMap(),
       totalBlockedResources: 0,
-      blockedAds: new Map(),
+      blockedAds: new WeakMap(),
       totalBlockedAds: 0,
       // Checked by the pageAction panel's "command" event listener to make sure
       // the pageAction panel never opens when the intro panel is currently open among other times
@@ -309,17 +319,17 @@ class Feature {
     // Add listeners to all new windows to know when to update pageAction.
     // Depending on which event happens (ex: onOpenWindow, onLocationChange),
     // it will call that listener method that exists on "this"
-    // Services.wm.addListener(this);
+    Services.wm.addListener(this);
   }
 
   unloadFromWindow(win) {
     this.removeWindowEventListeners(win);
-    // Services.wm.removeListener(this);
-    // const button = win.document.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
-    // if (button) {
-    //   button.removeEventListener("command", (evt) => this.handlePageActionButtonCommand(evt, win));
-    //   button.parentElement.removeChild(button);
-    // }
+    Services.wm.removeListener(this);
+    const pageActionButton = win.document.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
+    if (pageActionButton) {
+      pageActionButton.removeEventListener("command", this.handlePageActionButtonCommandRef);
+      pageActionButton.parentElement.removeChild(pageActionButton);
+    }
   }
 
   onWindowError(msg) {
@@ -338,28 +348,29 @@ class Feature {
   addWindowEventListeners(win) {
     if (win && win.gBrowser) {
       win.gBrowser.addTabsProgressListener(this);
-      // win.gBrowser.tabContainer.addEventListener(
-      //   "TabSelect",
-      //   (evt) => this.onTabChange(evt),
-      // );
-      // // handle the case where the window closed, but intro or pageAction panel
-      // // is still open.
-      // win.addEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
+      win.gBrowser.tabContainer.addEventListener(
+        "TabSelect",
+        this.onTabChangeRef,
+      );
+      // handle the case where the window closed, but intro or pageAction panel
+      // is still open.
+      win.addEventListener("SSWindowClosing", this.handleWindowClosingRef);
     }
   }
 
   removeWindowEventListeners(win) {
     if (win && win.gBrowser) {
       win.gBrowser.removeTabsProgressListener(this);
-      // win.gBrowser.tabContainer.removeEventListener(
-      //   "TabSelect",
-      //   (evt) => this.onTabChange(evt),
-      // );
-      // win.removeEventListener("SSWindowClosing", () => this.handleWindowClosing(win));
+      win.gBrowser.tabContainer.removeEventListener(
+        "TabSelect",
+        this.onTabChangeRef,
+      );
+      win.removeEventListener("SSWindowClosing", this.handleWindowClosingRef);
     }
   }
 
-  handleWindowClosing(win) {
+  handleWindowClosing(evt) {
+    const win = evt.target;
     if (this.state.introPanelIsShowing && win === this.introPanelChromeWindow) {
       this.hidePanel("window-close", true);
     }
@@ -482,8 +493,8 @@ class Feature {
 
     // if the user clicks off the panel, hide it
     if (!isIntroPanel) {
-      this.pageActionPanelChromeWindow.addEventListener("click", (evt) => this.handleChromeWindowClick(evt));
-      CleanupManager.addCleanupHandler(() => this.pageActionPanelChromeWindow.removeEventListener("click", (evt) => this.handleChromeWindowClick(evt)));
+      this.pageActionPanelChromeWindow.addEventListener("click", this.handleChromeWindowClickRef);
+      CleanupManager.addCleanupHandler(() => this.pageActionPanelChromeWindow.removeEventListener("click", this.handleChromeWindowClickRef));
     }
   }
 
@@ -527,24 +538,19 @@ class Feature {
   }
 
   addBrowserContent() {
-    const handleEmbeddedBrowserLoadRef = this.handleEmbeddedBrowserLoad.bind(this);
     this.embeddedBrowser.addEventListener(
       "load",
-      handleEmbeddedBrowserLoadRef,
+      this.handleEmbeddedBrowserLoadRef,
       // capture is required: event target is the HTML document <browser> loads
       { capture: true }
     );
     CleanupManager.addCleanupHandler(() => {
-      try {
-        this.embeddedBrowser.removeEventListener(
-          "load",
-          handleEmbeddedBrowserLoadRef,
-          // capture is required: event target is the HTML document <browser> loads
-          { capture: true }
-        );
-      } catch (error) {
-        // The <browser> has been removed from the page (via the pageAction button being removed)
-      }
+      this.embeddedBrowser.removeEventListener(
+        "load",
+        this.handleEmbeddedBrowserLoadRef,
+        // capture is required: event target is the HTML document <browser> loads
+        { capture: true }
+      );
     });
   }
 
@@ -556,6 +562,7 @@ class Feature {
     if (!this.embeddedBrowser.contentWindow) {
       return;
     }
+
     // enable messaging from page script to JSM
     Cu.exportFunction(
       this.sendMessageToChrome.bind(this),
@@ -640,20 +647,18 @@ class Feature {
 
   // These listeners are added to both the intro panel and the pageAction panel
   addPanelListeners(panel) {
-    const handlePopupShownRef = this.handlePopupShown.bind(this);
-    panel.addEventListener("popupshown", handlePopupShownRef);
+    panel.addEventListener("popupshown", this.handlePopupShownRef);
     CleanupManager.addCleanupHandler(() => {
       try {
-        panel.removeEventListener("popupshown", handlePopupShownRef);
+        panel.removeEventListener("popupshown", this.handlePopupShownRef);
       } catch (error) {
         // The panel has already been removed from the doc via the pageAction button being removed
       }
     });
-    const handlePopupHiddenRef = this.handlePopupHidden.bind(this);
-    panel.addEventListener("popuphidden", handlePopupHiddenRef);
+    panel.addEventListener("popuphidden", this.handlePopupHiddenRef);
     CleanupManager.addCleanupHandler(() => {
       try {
-        panel.removeEventListener("popuphidden", handlePopupHiddenRef);
+        panel.removeEventListener("popuphidden", this.handlePopupHiddenRef);
       } catch (error) {
         // The panel has already been removed from the doc via the pageAction button being removed
       }
@@ -716,16 +721,15 @@ class Feature {
 
     const filter = {urls: new win.MatchPatternSet(["*://*/*"])};
 
-    const onBeforeRequestRef = this.onBeforeRequest.bind(this);
     WebRequest.onBeforeRequest.addListener(
-      onBeforeRequestRef,
+      this.onBeforeRequestRef,
       // listener will only be called for requests whose targets match the filter
       filter,
       ["blocking"]
     );
     CleanupManager.addCleanupHandler(() => {
       WebRequest.onBeforeRequest.removeListener(
-        onBeforeRequestRef,
+        this.onBeforeRequestRef,
         // listener will only be called for requests whose targets match the filter
         filter,
         ["blocking"]
@@ -892,7 +896,6 @@ class Feature {
    */
   showPageAction(doc) {
     const urlbar = doc.getElementById("page-action-buttons");
-    const win = doc.ownerGlobal;
 
     let pageActionButton = doc.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
 
@@ -903,20 +906,15 @@ class Feature {
       pageActionButton.setAttribute(
         "image",
         "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled");
-      pageActionButton.addEventListener("command", (evt) => this.handlePageActionButtonCommand(evt, win));
-      CleanupManager.addCleanupHandler(() => {
-        try {
-          pageActionButton.removeEventListener("command", (evt) => this.handlePageActionButtonCommand(evt, win));
-        } catch (error) {
-          // pageActionButton has already been removed from the doc.
-        }
-      });
+      pageActionButton.addEventListener("command", this.handlePageActionButtonCommandRef);
+      // listener gets removed when hidePageAction is called or on uninit
 
       urlbar.append(pageActionButton);
     }
   }
 
-  handlePageActionButtonCommand(evt, win) {
+  handlePageActionButtonCommand(evt) {
+    const win = evt.target.ownerGlobal;
     // Make sure the user clicked on the pageAction button, otherwise
     // once the intro panel is closed by the user clicking a button inside
     // of it, it will trigger the pageAction panel to open immediately.
@@ -956,9 +954,10 @@ class Feature {
   }
 
   hidePageAction(doc) {
-    const button = doc.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
-    if (button) {
-      button.parentElement.removeChild(button);
+    const pageActionButton = doc.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
+    if (pageActionButton) {
+      pageActionButton.removeEventListener("command", this.handlePageActionButtonCommandRef);
+      pageActionButton.parentElement.removeChild(pageActionButton);
     }
   }
 
@@ -988,11 +987,14 @@ class Feature {
     await CleanupManager.cleanup();
 
     // Remove all references to DOMWindow objects and their descendants
-    this.introPanel = null;
-    this.introPanelChromeWindow = null;
-    this.pageActionPanel = null;
-    this.pageActionPanelChromeWindow = null;
-    this.embeddedBrowser = null;
+    delete this.introPanel;
+    delete this.introPanelChromeWindow;
+    delete this.pageActionPanel;
+    delete this.pageActionPanelChromeWindow;
+    delete this.embeddedBrowser;
+    delete this.state.blockedResources;
+    delete this.state.blockedAds;
+    delete this.state.timeSaved;
 
     Cu.unload(`resource://${STUDY}/lib/Canonicalize.jsm`);
     Cu.unload(`resource://${STUDY}/lib/BlockLists.jsm`);
