@@ -226,7 +226,11 @@ class Feature {
           reason = (nextState > prevState) ? "user-enabled-builtin-tracking-protection"
             : "user-disabled-builtin-tracking-protection";
           this.log.debug("User modified built-in tracking protection settings. Ending study.");
-          this.telemetry({ event: reason });
+          this.telemetry({
+            message_type: "event",
+            event: "study-ended",
+            reason: reason,
+          });
           await this.endStudy(reason, false);
         }
         break;
@@ -616,15 +620,29 @@ class Feature {
         break;
       case "introduction-reject":
         this.log.debug("You clicked 'Disable Protection' on the intro panel.");
-        this.telemetry({ event: message });
+        this.telemetry({
+          message_type: "event",
+          event: "ui-event",
+          ui_event: message,
+        });
         break;
       case "introduction-confirmation-cancel":
         this.log.debug("You clicked 'Cancel' on the intro confirmation panel.");
-        this.telemetry({ event: message });
+        this.telemetry({
+          message_type: "event",
+          event: "ui-event",
+          ui_event: message,
+        });
         break;
       case "introduction-confirmation-leave-study":
         this.log.debug("You clicked 'Disable' on the intro confirmation panel.");
         this.hidePanel(message, true);
+        this.telemetry({
+          message_type: "event",
+          event: "ui-event",
+          ui_event: message,
+        });
+        break;
         this.endStudy(message);
         break;
       case "page-action-reject":
@@ -633,11 +651,20 @@ class Feature {
         break;
       case "page-action-confirmation-cancel":
         this.log.debug("You clicked 'Cancel' on the pageAction confirmation panel.");
-        this.telemetry({ event: message });
+        this.telemetry({
+          message_type: "event",
+          event: "ui-event",
+          ui_event: message,
+        });
         break;
       case "page-action-confirmation-leave-study":
         this.log.debug("You clicked 'Disable' on the pageAction confirmation panel.");
         this.hidePanel(message, false);
+        this.telemetry({
+          message_type: "event",
+          event: "ui-event",
+          ui_event: message,
+        });
         this.endStudy(message);
         break;
       case "browser-resize":
@@ -678,7 +705,11 @@ class Feature {
     }
     this.log.debug(`${panelType} shown.`);
     this.panelShownTime = Date.now();
-    this.telemetry({ event: `${panelType}-shown` });
+    this.telemetry({
+        message_type: "event",
+        event: "panel-shown",
+        panel_type: panelType
+      });
   }
 
   handlePopupHidden() {
@@ -695,9 +726,11 @@ class Feature {
       (panelHiddenTime - this.panelShownTime) / 1000;
     this.log.debug(`${panelType} was open for ${Math.round(panelOpenTime)} seconds.`);
     this.telemetry({
-      event: `${panelType}-hidden`,
-      secondsPanelWasShowing: Math.round(panelOpenTime).toString(),
-    });
+        message_type: "event",
+        event: "panel-hidden",
+        panel_type: panelType,
+        secondsPanelWasShowing: Math.round(panelOpenTime).toString(),
+      });
   }
 
   // @param {Object} - data, a string:string key:value object
@@ -753,8 +786,10 @@ class Feature {
     }
     this.log.debug(`${panelType} has been dismissed by user due to ${details}.`);
     this.telemetry({
-      event: `${panelType}-dismissed`,
-      details,
+      message_type: "event",
+      event: "panel-dismissed",
+      panel_type: panelType,
+      reason: details,
     });
   }
 
@@ -958,6 +993,12 @@ class Feature {
       // if "fast" treatment, convert counter from ms to seconds and add unit "s"
       const label = this.treatment === "private" ? counter
         : `${Math.ceil(counter / 1000)}s`;
+
+      this.telemetry({
+        message_type: "event",
+        event: "badge-counter",
+        value: String(counter)
+      })
       toolbarButton.setAttribute("label", label);
     }
   }
