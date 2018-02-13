@@ -319,12 +319,12 @@ class Feature {
     // Add listeners to all new windows to know when to update pageAction.
     // Depending on which event happens (ex: onOpenWindow, onLocationChange),
     // it will call that listener method that exists on "this"
-    Services.wm.addListener(this);
+    // Services.wm.addListener(this);
   }
 
   unloadFromWindow(win) {
     this.removeWindowEventListeners(win);
-    Services.wm.removeListener(this);
+    // Services.wm.removeListener(this);
     const pageActionButton = win.document.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
     if (pageActionButton) {
       pageActionButton.removeEventListener("command", this.handlePageActionButtonCommandRef);
@@ -348,24 +348,24 @@ class Feature {
   addWindowEventListeners(win) {
     if (win && win.gBrowser) {
       win.gBrowser.addTabsProgressListener(this);
-      win.gBrowser.tabContainer.addEventListener(
-        "TabSelect",
-        this.onTabChangeRef,
-      );
-      // handle the case where the window closed, but intro or pageAction panel
-      // is still open.
-      win.addEventListener("SSWindowClosing", this.handleWindowClosingRef);
+      // win.gBrowser.tabContainer.addEventListener(
+      //   "TabSelect",
+      //   this.onTabChangeRef,
+      // );
+      // // handle the case where the window closed, but intro or pageAction panel
+      // // is still open.
+      // win.addEventListener("SSWindowClosing", this.handleWindowClosingRef);
     }
   }
 
   removeWindowEventListeners(win) {
     if (win && win.gBrowser) {
       win.gBrowser.removeTabsProgressListener(this);
-      win.gBrowser.tabContainer.removeEventListener(
-        "TabSelect",
-        this.onTabChangeRef,
-      );
-      win.removeEventListener("SSWindowClosing", this.handleWindowClosingRef);
+      // win.gBrowser.tabContainer.removeEventListener(
+      //   "TabSelect",
+      //   this.onTabChangeRef,
+      // );
+      // win.removeEventListener("SSWindowClosing", this.handleWindowClosingRef);
     }
   }
 
@@ -400,7 +400,7 @@ class Feature {
       this.state.timeSaved.set(browser, 0);
 
       // Hide intro panel on location change in the same tab if showing
-      if (this.state.introPanelIsShowing && this.introPanelBrowser === browser) {
+      if (this.state.introPanelIsShowing && this.weakIntroPanelBrowser.get() === browser) {
         this.hidePanel("location-change-same-tab", true);
       }
       if (this.state.pageActionPanelIsShowing) {
@@ -409,7 +409,7 @@ class Feature {
     }
 
     if (this.shouldShowIntroPanel) {
-      this.introPanelBrowser = browser;
+      this.weakIntroPanelBrowser = Cu.getWeakReference(browser);
     }
   }
 
@@ -988,6 +988,7 @@ class Feature {
 
     // Remove all references to DOMWindow objects and their descendants
     delete this.introPanel;
+    delete this.weakIntroPanelBrowser;
     delete this.introPanelChromeWindow;
     delete this.pageActionPanel;
     delete this.pageActionPanelChromeWindow;
