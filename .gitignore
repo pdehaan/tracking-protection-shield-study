@@ -1,6 +1,7 @@
 chrome.manifest
 install.rdf
 *.xpi
+dist/*
 node_modules
 addon/StudyUtils.jsm
 .DS_Store

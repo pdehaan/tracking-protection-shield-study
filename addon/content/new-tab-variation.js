@@ -12,6 +12,7 @@ const NEW_TAB_MESSAGE_DIV_ID = "tracking-protection-messaging-study-message";
 class TrackingProtectionStudy {
   constructor(contentWindow) {
     this.contentWindow = contentWindow;
+    this.newTabMessage = "";
     this.init();
   }
 
@@ -24,6 +25,7 @@ class TrackingProtectionStudy {
 
   receiveMessage(msg) {
     const doc = this.contentWindow.document;
+    this.addContentToNewTabRef = () => this.addContentToNewTab(msg.data, doc);
     switch (msg.name) {
       case "TrackingStudy:ShuttingDown":
         this.onShutdown();
@@ -34,13 +36,13 @@ class TrackingProtectionStudy {
       case "TrackingStudy:InitialContent":
         // check if document has already loaded
         if (doc.readyState === "complete") {
-          this.addContentToNewTab(msg.data.state, doc);
+          this.addContentToNewTab(msg.data, doc);
         } else {
-          doc.addEventListener("DOMContentLoaded", () => this.addContentToNewTab(msg.data.state, doc));
+          doc.addEventListener("DOMContentLoaded", this.addContentToNewTabRef);
         }
         break;
       case "TrackingStudy:UpdateContent":
-        this.updateTPNumbers(msg.data.state, doc);
+        this.updateTPNumbers(msg.data, doc);
         break;
       default:
         throw new Error(`Message name not recognized: ${msg.name}`);
@@ -48,16 +50,18 @@ class TrackingProtectionStudy {
   }
 
   addContentToNewTab(state, doc) {
-    const time = this.getHumanReadableTimeVals(state.totalTimeSaved);
+    const time = this.getHumanReadableTimeVals(state.timeSaved);
 
     // if we haven't blocked anything yet, don't modify the page
-    if (state.totalBlockedResources) {
-      let message = state.newTabMessage;
-      message = message.replace("${blockedRequests}", state.totalBlockedResources);
-      message = message.replace("${blockedAds}", state.totalBlockedAds);
-      message = message.replace("${blockedSites}", state.totalBlockedWebsites);
+    if (state.blockedResources) {
+      this.newTabMessage = state.newTabMessage;
+      // Make a copy of message so we don't mutate the original string, which
+      // we need to preserve for updateTPNumbers.
+      let message = this.newTabMessage;
+      message = message.replace("${blockedRequests}", state.blockedResources);
+      message = message.replace("${blockedAds}", state.blockedAds);
       message = message.replace("${time}", time);
-      
+
       // Check if the study UI has already been added to this page
       const tpContent = doc.getElementById(`${NEW_TAB_CONTAINER_DIV_ID}`);
       if (tpContent) {
@@ -122,23 +126,25 @@ class TrackingProtectionStudy {
   }
 
   updateTPNumbers(state, doc) {
-    const time = this.getHumanReadableTimeVals(state.totalTimeSaved);
+    const time = this.getHumanReadableTimeVals(state.timeSaved);
     const span = doc.getElementById(`${NEW_TAB_MESSAGE_DIV_ID}`);
     if (span) {
-      let message = state.newTabMessage;
-      message = message.replace("${blockedRequests}", state.totalBlockedResources);
-      message = message.replace("${blockedAds}", state.totalBlockedAds);
-      message = message.replace("${blockedSites}", state.totalBlockedWebsites);
+      let message = this.newTabMessage;
+      message = message.replace("${blockedRequests}", state.blockedResources);
+      message = message.replace("${blockedAds}", state.blockedAds);
       message = message.replace("${time}", time);
       span.innerHTML = message;
     }
   }
 
   onShutdown() {
+    const doc = this.contentWindow.document;
     removeMessageListener("TrackingStudy:InitialContent", this);
     removeMessageListener("TrackingStudy:UpdateContent", this);
     removeMessageListener("TrackingStudy:ShuttingDown", this);
     removeMessageListener("TrackingStudy:Uninstalling", this);
+    removeEventListener("load", handleLoad, true);
+    doc.removeEventListener("DOMContentLoaded", this.addContentToNewTabRef);
   }
 
   onUninstall() {
@@ -150,7 +156,9 @@ class TrackingProtectionStudy {
   }
 }
 
-addEventListener("load", function onLoad(evt) {
+addEventListener("load", handleLoad, true);
+
+function handleLoad(evt) {
   const window = evt.target.defaultView;
   const location = window.location.href;
   if (location === ABOUT_NEWTAB_URL || location === ABOUT_HOME_URL) {
@@ -160,4 +168,4 @@ addEventListener("load", function onLoad(evt) {
       sendAsyncMessage("TrackingStudy:InitialContent");
     });
   }
-}, true);
+}

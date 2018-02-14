@@ -49,6 +49,8 @@ module.exports = {
     "comma-dangle": ["error", "always-multiline"],
     "eqeqeq": "error",
     "indent": ["warn", 2, {SwitchCase: 1}],
+    "mozilla/balanced-listeners": "error",
+    "mozilla/no-aArgs": "warn",
     "no-console": "warn",
     "no-shadow": ["error"],
     "no-unused-vars": "error",
