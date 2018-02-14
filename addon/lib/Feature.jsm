@@ -319,12 +319,12 @@ class Feature {
     // Add listeners to all new windows to know when to update pageAction.
     // Depending on which event happens (ex: onOpenWindow, onLocationChange),
     // it will call that listener method that exists on "this"
-    // Services.wm.addListener(this);
+    Services.wm.addListener(this);
   }
 
   unloadFromWindow(win) {
     this.removeWindowEventListeners(win);
-    // Services.wm.removeListener(this);
+    Services.wm.removeListener(this);
     const pageActionButton = win.document.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
     if (pageActionButton) {
       pageActionButton.removeEventListener("command", this.handlePageActionButtonCommandRef);
@@ -348,33 +348,34 @@ class Feature {
   addWindowEventListeners(win) {
     if (win && win.gBrowser) {
       win.gBrowser.addTabsProgressListener(this);
-      // win.gBrowser.tabContainer.addEventListener(
-      //   "TabSelect",
-      //   this.onTabChangeRef,
-      // );
-      // // handle the case where the window closed, but intro or pageAction panel
-      // // is still open.
-      // win.addEventListener("SSWindowClosing", this.handleWindowClosingRef);
+      win.gBrowser.tabContainer.addEventListener(
+        "TabSelect",
+        this.onTabChangeRef,
+      );
+      // handle the case where the window closed, but intro or pageAction panel
+      // is still open.
+      win.addEventListener("SSWindowClosing", this.handleWindowClosingRef);
     }
   }
 
   removeWindowEventListeners(win) {
     if (win && win.gBrowser) {
       win.gBrowser.removeTabsProgressListener(this);
-      // win.gBrowser.tabContainer.removeEventListener(
-      //   "TabSelect",
-      //   this.onTabChangeRef,
-      // );
-      // win.removeEventListener("SSWindowClosing", this.handleWindowClosingRef);
+      win.gBrowser.tabContainer.removeEventListener(
+        "TabSelect",
+        this.onTabChangeRef,
+      );
+      win.removeEventListener("SSWindowClosing", this.handleWindowClosingRef);
     }
   }
 
   handleWindowClosing(evt) {
     const win = evt.target;
-    if (this.state.introPanelIsShowing && win === this.introPanelChromeWindow) {
+    if (this.state.introPanelIsShowing && win === this.weakIntroPanelChromeWindow.get()) {
+      this.log.debug("about to hide introPanel");
       this.hidePanel("window-close", true);
     }
-    if (this.state.pageActionPanelIsShowing && win === this.pageActionPanelChromeWindow) {
+    if (this.state.pageActionPanelIsShowing && win === this.weakPageActionPanelChromeWindow.get()) {
       this.hidePanel("window-close", false);
     }
   }
@@ -476,14 +477,16 @@ class Feature {
     }
     if (isIntroPanel) {
       // Needed to determine if panel should be dismissed due to window close
-      this.introPanelChromeWindow = win;
+      this.weakIntroPanelChromeWindow = Cu.getWeakReference(win);
     } else {
-      this.pageActionPanelChromeWindow = win;
+      this.weakPageActionPanelChromeWindow = Cu.getWeakReference(win);
     }
     const doc = win.document;
     const pageActionButton = doc.getElementById(this.PAGE_ACTION_BUTTON_ID);
 
-    let panel = isIntroPanel ? this.introPanel : this.pageActionPanel;
+    const weakIntroPanel = this.weakIntroPanel ? this.weakIntroPanel.get() : null;
+    const weakPageActionPanel = this.weakPageActionPanel ? this.weakPageActionPanel.get() : null;
+    let panel = isIntroPanel ? weakIntroPanel : weakPageActionPanel;
     if (!panel) {
       panel = this.getPanel(win, isIntroPanel);
     }
@@ -493,8 +496,8 @@ class Feature {
 
     // if the user clicks off the panel, hide it
     if (!isIntroPanel) {
-      this.pageActionPanelChromeWindow.addEventListener("click", this.handleChromeWindowClickRef);
-      CleanupManager.addCleanupHandler(() => this.pageActionPanelChromeWindow.removeEventListener("click", this.handleChromeWindowClickRef));
+      this.weakPageActionPanelChromeWindow.get().addEventListener("click", this.handleChromeWindowClickRef);
+      CleanupManager.addCleanupHandler(() => this.weakPageActionPanelChromeWindow.get().removeEventListener("click", this.handleChromeWindowClickRef));
     }
   }
 
@@ -525,12 +528,12 @@ class Feature {
     embeddedBrowser.setAttribute("type", "content");
     embeddedBrowser.setAttribute("flex", "1");
     panel.appendChild(embeddedBrowser);
-    this.embeddedBrowser = embeddedBrowser;
+    this.weakEmbeddedBrowser = Cu.getWeakReference(embeddedBrowser);
     if (isIntroPanel) {
       // Used to hide intro panel when tab change, window close, or location change occur
-      this.introPanel = panel;
+      this.weakIntroPanel = Cu.getWeakReference(panel);
     } else {
-      this.pageActionPanel = panel;
+      this.weakPageActionPanel = Cu.getWeakReference(panel);
     }
     // TODO pass strings and values into this method to show up on the panel
     this.addBrowserContent();
@@ -538,14 +541,14 @@ class Feature {
   }
 
   addBrowserContent() {
-    this.embeddedBrowser.addEventListener(
+    this.weakEmbeddedBrowser.get().addEventListener(
       "load",
       this.handleEmbeddedBrowserLoadRef,
       // capture is required: event target is the HTML document <browser> loads
       { capture: true }
     );
     CleanupManager.addCleanupHandler(() => {
-      this.embeddedBrowser.removeEventListener(
+      this.weakEmbeddedBrowser.get().removeEventListener(
         "load",
         this.handleEmbeddedBrowserLoadRef,
         // capture is required: event target is the HTML document <browser> loads
@@ -559,14 +562,14 @@ class Feature {
     // so each embeddedBrowser actually loads twice.
     // Make sure we are only accessing our src page
     // accessing about:blank's contentWindow returns a dead object
-    if (!this.embeddedBrowser.contentWindow) {
+    if (!this.weakEmbeddedBrowser.get().contentWindow) {
       return;
     }
 
     // enable messaging from page script to JSM
     Cu.exportFunction(
       this.sendMessageToChrome.bind(this),
-      this.embeddedBrowser.contentWindow,
+      this.weakEmbeddedBrowser.get().contentWindow,
       { defineAs: "sendMessageToChrome"}
     );
     // Get the quantities for the pageAction panel for the current page
@@ -584,7 +587,7 @@ class Feature {
       : this.state.blockedAds.get(browser);
     // Let the page script know it can now send messages to JSMs,
     // since sendMessageToChrome has been exported
-    this.embeddedBrowser.contentWindow.wrappedJSObject
+    this.weakEmbeddedBrowser.get().contentWindow.wrappedJSObject
       .onChromeListening(JSON.stringify({
         introHeader: this.introPanelHeaders[this.treatment],
         introMessage: this.introPanelMessages[this.treatment],
@@ -602,8 +605,8 @@ class Feature {
 
   // <browser> height must be set explicitly; base it off content dimensions
   resizeBrowser(dimensions) {
-    this.embeddedBrowser.style.width = `${ dimensions.width }px`;
-    this.embeddedBrowser.style.height = `${ dimensions.height }px`;
+    this.weakEmbeddedBrowser.get().style.width = `${ dimensions.width }px`;
+    this.weakEmbeddedBrowser.get().style.height = `${ dimensions.height }px`;
   }
 
   handleUIEvent(message, data) {
@@ -666,7 +669,7 @@ class Feature {
   }
 
   handlePopupShown() {
-    const panelType = (this.embeddedBrowser.src === `resource://${STUDY}/content/intro-panel.html`) ?
+    const panelType = (this.weakEmbeddedBrowser.get().src === `resource://${STUDY}/content/intro-panel.html`) ?
       "intro-panel" : "page-action-panel";
     if (panelType === "intro-panel") {
       this.state.introPanelIsShowing = true;
@@ -679,7 +682,7 @@ class Feature {
   }
 
   handlePopupHidden() {
-    const panelType = (this.embeddedBrowser.src === `resource://${STUDY}/content/intro-panel.html`) ?
+    const panelType = (this.weakEmbeddedBrowser.get().src === `resource://${STUDY}/content/intro-panel.html`) ?
       "intro-panel" : "page-action-panel";
     if (panelType === "intro-panel") {
       this.state.introPanelIsShowing = false;
@@ -739,12 +742,14 @@ class Feature {
 
   hidePanel(details, isIntroPanel) {
     const panelType = isIntroPanel ? "introduction-panel" : "page-action-panel";
-    const panel = isIntroPanel ? this.introPanel : this.pageActionPanel;
+    const weakIntroPanel = this.weakIntroPanel ? this.weakIntroPanel.get() : null;
+    const weakPageActionPanel = this.weakPageActionPanel ? this.weakPageActionPanel.get() : null;
+    const panel = isIntroPanel ? weakIntroPanel : weakPageActionPanel;
     if (panel) {
       panel.hidePopup();
     }
     if (!isIntroPanel) {
-      this.pageActionPanelChromeWindow.removeEventListener("click", (evt) => this.handleChromeWindowClick(evt));
+      this.weakPageActionPanelChromeWindow.get().removeEventListener("click", (evt) => this.handleChromeWindowClick(evt));
     }
     this.log.debug(`${panelType} has been dismissed by user due to ${details}.`);
     this.telemetry({
@@ -851,7 +856,7 @@ class Feature {
           const secondQuantity = this.treatment === "fast"
             ? this.state.timeSaved.get(details.browser)
             : this.state.blockedAds.get(details.browser);
-          this.embeddedBrowser.contentWindow.wrappedJSObject
+          this.weakEmbeddedBrowser.get().contentWindow.wrappedJSObject
             .updateTPNumbers(JSON.stringify({
               treatment: this.treatment,
               firstQuantity,
@@ -972,9 +977,9 @@ class Feature {
   async uninit() {
 
     // Shutdown intro panel or pageAction panel, if either is active
-    if (this.embeddedBrowser) {
+    if (this.weakEmbeddedBrowser) {
       try {
-        this.embeddedBrowser.contentWindow.wrappedJSObject.onShutdown();
+        this.weakEmbeddedBrowser.get().contentWindow.wrappedJSObject.onShutdown();
       } catch (error) {
         // the <browser> element must have already been removed from the chrome
       }
@@ -987,12 +992,12 @@ class Feature {
     await CleanupManager.cleanup();
 
     // Remove all references to DOMWindow objects and their descendants
-    delete this.introPanel;
+    delete this.weakIntroPanel;
     delete this.weakIntroPanelBrowser;
-    delete this.introPanelChromeWindow;
-    delete this.pageActionPanel;
-    delete this.pageActionPanelChromeWindow;
-    delete this.embeddedBrowser;
+    delete this.weakIntroPanelChromeWindow;
+    delete this.weakPageActionPanel;
+    delete this.weakPageActionPanelChromeWindow;
+    delete this.weakEmbeddedBrowser;
     delete this.state.blockedResources;
     delete this.state.blockedAds;
     delete this.state.timeSaved;
