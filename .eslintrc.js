@@ -44,7 +44,6 @@ module.exports = {
     "jsdoc/require-param-type": "warn",
     "jsdoc/require-returns-description": "warn",
     "jsdoc/require-returns-type": "warn",
-    "mozilla/no-aArgs": "warn",
 
     "comma-dangle": ["error", "always-multiline"],
     "eqeqeq": "error",
