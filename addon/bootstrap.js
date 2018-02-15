@@ -9,7 +9,9 @@ XPCOMUtils.defineLazyModuleGetter(this, "Services",
   "resource://gre/modules/Services.jsm");
 XPCOMUtils.defineLazyModuleGetter(this, "Preferences",
   "resource://gre/modules/Preferences.jsm");
+
 const STUDY = "tracking-protection-messaging-study";
+
 XPCOMUtils.defineLazyModuleGetter(this, "config",
   `resource://${STUDY}/lib/Config.jsm`);
 XPCOMUtils.defineLazyModuleGetter(this, "studyUtils",
@@ -28,8 +30,12 @@ this.Bootstrap = {
     "extensions.tracking_protection_messaging_study.expiration_date_string",
   STUDY_DURATION_WEEKS: 2,
 
+  /**
+   * @param addonData Array [ "id", "version", "installPath", "resourceURI", "instanceID", "webExtension" ]  bootstrap.js:48
+   * @param reason
+   * @returns {Promise<void>}
+   */
   async startup(addonData, reason) {
-    // can't access resource:// modules until addon startup()
     this.REASONS = studyUtils.REASONS;
 
     this.initLog();
@@ -47,7 +53,7 @@ this.Bootstrap = {
     if ((this.REASONS[reason]) === "ADDON_INSTALL") {
       //  telemetry "enter" ONCE
       await studyUtils.firstSeen();
-      const eligible = await config.isEligible(); // addon-specific
+      const eligible = await config.isEligible();
       if (!eligible) {
         this.log.debug("User is ineligible, ending study.");
         // 1. uses config.endings.ineligible.url if any,
@@ -177,9 +183,11 @@ this.Bootstrap = {
   },
 
   /**
-  * Shutdown needs to distinguish between USER-DISABLE and other
-  * times that `endStudy` is called.
-  */
+   * Shutdown needs to distinguish between USER-DISABLE and other
+   * times that `endStudy` is called.
+   *
+   * studyUtils._isEnding means this is a '2nd shutdown'.
+   */
   async shutdown(addonData, reason) {
     this.log.debug("shutdown", this.REASONS[reason] || reason);
 
@@ -210,7 +218,7 @@ this.Bootstrap = {
       Services.prefs.clearUserPref(this.DURATION_OVERRIDE_PREF);
       Services.prefs.clearUserPref(this.VARIATION_OVERRIDE_PREF);
 
-      // Study could end due to user ineligible or study expired, in which case feature is not initialized
+      // If clause neccessary since study could end due to user ineligible or study expired, in which case feature is not initialized
       if (this.feature) {
         await this.feature.endStudy("user-disable");
       }
@@ -218,7 +226,7 @@ this.Bootstrap = {
 
     // normal shutdown, or 2nd uninstall request
 
-    // Study could end due to user ineligible or study expired, in which case feature is not initialized
+    // If clause neccessary since study could end due to user ineligible or study expired, in which case feature is not initialized
     if (this.feature) {
       await this.feature.uninit();
     }
