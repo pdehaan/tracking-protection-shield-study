@@ -46,6 +46,8 @@ XPCOMUtils.defineLazyModuleGetter(this, "CleanupManager",
   `resource://${STUDY}/lib/CleanupManager.jsm`);
 XPCOMUtils.defineLazyModuleGetter(this, "WindowWatcher",
   `resource://${STUDY}/lib/WindowWatcher.jsm`);
+XPCOMUtils.defineLazyModuleGetter(this, "Storage",
+  `resource://${STUDY}/lib/Storage.jsm`);
 
 const EXPORTED_SYMBOLS = ["Feature"];
 
@@ -163,6 +165,8 @@ class Feature {
     // Note: This listener can't be added until after the treatment has been applied,
     // since we are initializing built-in TP based on the treatment.
     this.addBuiltInTrackingProtectionListeners();
+
+    await this.initBehaviorSummary();
   }
 
   addContentMessageListeners() {
@@ -201,6 +205,18 @@ class Feature {
       };
       return new ConsoleAPI(consoleOptions);
     });
+  }
+
+  async initBehaviorSummary() {
+    const summaryLog = await Storage.get("summary-log");
+
+    if (!summaryLog) { // first time
+      Storage.set("summary-log", {
+        disable_click: "false",
+        enable_click: "false",
+        badgeClicks: String(0)
+      });
+    }
   }
 
   addBuiltInTrackingProtectionListeners() {
