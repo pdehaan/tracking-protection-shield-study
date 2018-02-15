@@ -49,8 +49,13 @@ this.Bootstrap = {
     this.variation = variation;
     this.reason = reason;
 
-    // if addon was just installed, check if user is eligible
-    if ((this.REASONS[reason]) === "ADDON_INSTALL") {
+    // Check if the user is eligible to run this study using the |isEligible|
+    // function when the study is initialized (install or upgrade, the latter
+    // being interpreted as a new install).
+    if (
+      reason === this.REASONS.ADDON_INSTALL ||
+      reason === this.REASONS.ADDON_UPGRADE
+    ) {
       //  telemetry "enter" ONCE
       await studyUtils.firstSeen();
       const eligible = await config.isEligible();
