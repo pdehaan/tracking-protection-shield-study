@@ -225,8 +225,8 @@ this.Bootstrap = {
 
     // Unload addon-specific modules
     Cu.unload(`resource://${STUDY}/lib/Feature.jsm`);
-    Cu.unload(`resource://${STUDY}/Config.jsm`);
-    Cu.unload(`resource://${STUDY}/StudyUtils.jsm`);
+    Cu.unload(`resource://${STUDY}/lib/Config.jsm`);
+    Cu.unload(`resource://${STUDY}/lib/StudyUtils.jsm`);
   },
 
   uninstall() {
