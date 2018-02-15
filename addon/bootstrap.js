@@ -57,7 +57,7 @@ this.Bootstrap = {
       reason === this.REASONS.ADDON_UPGRADE
     ) {
       //  telemetry "enter" ONCE
-      await studyUtils.firstSeen();
+      studyUtils.firstSeen();
       const eligible = await config.isEligible();
       if (!eligible) {
         this.log.debug("User is ineligible, ending study.");
