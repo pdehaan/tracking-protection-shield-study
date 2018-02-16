@@ -21,6 +21,16 @@ class TrackingProtectionStudy {
     addMessageListener("TrackingStudy:UpdateContent", this);
     addMessageListener("TrackingStudy:ShuttingDown", this);
     addMessageListener("TrackingStudy:Uninstalling", this);
+
+    this.initTimer();
+  }
+
+  initTimer() {
+    this.openingTime = Math.floor(Date.now() / 1000);
+    this.contentWindow.addEventListener("beforeunload", ()=> {
+      sendAsyncMessage("TrackingStudy::NewTabOpenTime",
+        Math.floor(Date.now() / 1000) - this.openingTime);
+    });
   }
 
   receiveMessage(msg) {

@@ -91,6 +91,7 @@ class Feature {
     this.handleChromeWindowClickRef = this.handleChromeWindowClick.bind(this);
 
     this.init(logLevel);
+    this.initBehaviorSummary();
   }
 
   async init(logLevel) {
@@ -172,7 +173,10 @@ class Feature {
   addContentMessageListeners() {
     // content listener
     Services.mm.addMessageListener("TrackingStudy:InitialContent", this);
+    Services.mm.addMessageListener("TrackingStudy::NewTabOpenTime", this);
+
     CleanupManager.addCleanupHandler(() => Services.mm.removeMessageListener("TrackingStudy:InitialContent", this));
+    CleanupManager.addCleanupHandler(() => Services.mm.removeMessageListener("TrackingStudy::NewTabOpenTime", this));
   }
 
   receiveMessage(msg) {
@@ -185,6 +189,14 @@ class Feature {
           blockedAds: this.state.totalBlockedAds,
           newTabMessage: this.newTabMessages[this.treatment],
         });
+        break;
+      case "TrackingStudy::NewTabOpenTime":
+        this.log.debug(`You opened a new tab page for ${msg.data} seconds.`);
+            this.telemetry({
+              message_type: "event",
+              event: "new-tab-closed",
+              time: String(msg.data)
+            });
         break;
       default:
         throw new Error(`Message type not recognized, ${ msg.name }`);
@@ -208,15 +220,15 @@ class Feature {
   }
 
   async initBehaviorSummary() {
-    const summaryLog = await Storage.get("summary-log");
+    const initialized = (await Storage.has("behavior-summary"));
+    if (initialized) return;
 
-    if (!summaryLog) { // first time
-      Storage.set("summary-log", {
-        disable_click: "false",
-        enable_click: "false",
-        badgeClicks: String(0)
-      });
-    }
+    await Storage.create("behavior-summary", {
+      reject: "false",
+      intro_accept: "false",
+      intro_reject: "false",
+      badgeClicks: String(0)
+    });
   }
 
   addBuiltInTrackingProtectionListeners() {
@@ -633,6 +645,8 @@ class Feature {
     switch (message) {
       case "introduction-accept":
         this.hidePanel(message, true);
+
+        Storage.update("behavior-summary", {intro_accept: "true"});
         break;
       case "introduction-reject":
         this.log.debug("You clicked 'Disable Protection' on the intro panel.");
@@ -658,8 +672,8 @@ class Feature {
           event: "ui-event",
           ui_event: message,
         });
-        break;
-        this.endStudy(message);
+
+        Storage.update("behavior-summary", {intro_reject: "true"}).then(() => this.endStudy(message));
         break;
       case "page-action-reject":
         this.log.debug("You clicked 'Disable Protection' on the pageAction panel.");
@@ -681,7 +695,8 @@ class Feature {
           event: "ui-event",
           ui_event: message,
         });
-        this.endStudy(message);
+
+        Storage.update("behavior-summary", {reject: "true"}).then(() => this.endStudy(message));
         break;
       case "browser-resize":
         this.resizeBrowser(JSON.parse(data));
@@ -752,6 +767,11 @@ class Feature {
   // @param {Object} - data, a string:string key:value object
   async telemetry(data) {
     this.studyUtils.telemetry(data);
+  }
+
+  async reportBehaviorSummary() {
+    const behaviorSummary = await Storage.get("behavior-summary");
+    return this.telemetry(Object.assign({message_type: "behavior_summary"}, behaviorSummary));
   }
 
   async reimplementTrackingProtection(win) {
@@ -987,6 +1007,13 @@ class Feature {
           this.introPanelMessages[this.treatment],
           isIntroPanel
         );
+
+        // log page action click
+        Storage.get("behavior-summary").then((behaviorSummary) => {
+          let clicks = Number(behaviorSummary.badgeClicks) + 1;
+          return Storage.update("behavior-summary", {badgeClicks: String(clicks)})
+        });
+
       } else {
         this.hidePanel("page-action-click", false);
       }
