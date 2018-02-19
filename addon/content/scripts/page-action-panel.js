@@ -64,6 +64,7 @@ class PageActionPanel {
     secondQuantityMessage = secondQuantityMessage.replace("${blockedAds}", blockedAds);
     secondQuantityMessage = secondQuantityMessage.replace("${timeSaved}", timeSaved);
     secondQuantityMessage = secondQuantityMessage.replace("${timeUnit}", timeUnit);
+    // eslint-disable-next-line no-unsanitized/property
     this.pageActionSecondQuantity.innerHTML = secondQuantityMessage;
     this.pageActionMessage.textContent = this.msg.pageActionMessage;
   }
@@ -129,6 +130,7 @@ class PageActionPanel {
     secondQuantityHTML = secondQuantityHTML.replace("${blockedAds}", blockedAds);
     secondQuantityHTML = secondQuantityHTML.replace("${timeSaved}", timeSaved);
     secondQuantityHTML = secondQuantityHTML.replace("${timeUnit}", timeUnit);
+    // eslint-disable-next-line no-unsanitized/property
     this.pageActionSecondQuantity.innerHTML = secondQuantityHTML;
   }
 

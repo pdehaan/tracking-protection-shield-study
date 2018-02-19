@@ -67,12 +67,14 @@ class TrackingProtectionStudy {
       if (tpContent) {
         // if already on the page, just update the message
         const spanEle = tpContent.getElementsByTagName("div")[0];
+        // eslint-disable-next-line no-unsanitized/property
         spanEle.innerHTML = message;
         return;
       }
 
       const div = doc.createElement("div");
       div.id = `${NEW_TAB_MESSAGE_DIV_ID}`;
+      // eslint-disable-next-line no-unsanitized/property
       div.innerHTML = message;
 
       const newContainer = doc.createElement("div");
@@ -111,6 +113,7 @@ class TrackingProtectionStudy {
       }
     }
     if (timeMinutes > 0) {
+      // eslint-disable-next-line no-nested-ternary
       timeStr += `${timeHours > 0 ? (timeSeconds > 0 ? "," : " and") : ""} <span class='tracking-protection-messaging-study-message-quantity'>${ Math.round(timeMinutes) }</span> minute`;
       if (Math.round(timeMinutes) > 1) {
         timeStr += "s";
@@ -133,6 +136,7 @@ class TrackingProtectionStudy {
       message = message.replace("${blockedRequests}", state.blockedResources);
       message = message.replace("${blockedAds}", state.blockedAds);
       message = message.replace("${time}", time);
+      // eslint-disable-next-line no-unsanitized/property
       span.innerHTML = message;
     }
   }

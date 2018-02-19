@@ -44,17 +44,18 @@ module.exports = {
     "jsdoc/require-param-type": "warn",
     "jsdoc/require-returns-description": "warn",
     "jsdoc/require-returns-type": "warn",
+    "mozilla/balanced-listeners": "error",
+    "mozilla/no-aArgs": "warn",
+    "mozilla/use-chromeutils-import": "off", // TODO: "warn"?
 
     "comma-dangle": ["error", "always-multiline"],
     "eqeqeq": "error",
     "indent": ["warn", 2, {SwitchCase: 1}],
-    "mozilla/balanced-listeners": "error",
-    "mozilla/no-aArgs": "warn",
     "no-console": "warn",
-    "no-shadow": ["error"],
+    "no-shadow": "error",
     "no-unused-vars": "error",
-    "no-var": "off", // TODO: error
-    "no-warning-comments": ["off", {"location": "anywhere"}], // TODO: warn
+    "no-var": "error",
+    "no-warning-comments": ["warn", {"location": "anywhere"}],
     "prefer-const": "warn",
     "prefer-spread": "error",
     "semi": ["error", "always"],

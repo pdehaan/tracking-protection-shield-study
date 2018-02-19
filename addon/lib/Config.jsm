@@ -1,20 +1,21 @@
 "use strict";
 
-/* to use:
+/* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(config|EXPORTED_SYMBOLS)" }]*/
 
-- Recall this file has chrome privileges
-- Cu.import in this file will work for any 'general firefox things' (Services,etc)
-  but NOT for addon-specific libs
-*/
+/**
+ * To use:
+ * - Recall this file has chrome privileges
+ * - Cu.import in this file will work for any 'general firefox things' (Services,etc)
+ *   but NOT for addon-specific libs
+ */
+
 const { utils: Cu } = Components;
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
-XPCOMUtils.defineLazyModuleGetter(this, "Services",
-  "resource://gre/modules/Services.jsm");
+XPCOMUtils.defineLazyModuleGetter(this, "Services", "resource://gre/modules/Services.jsm");
 
-/* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(config|EXPORTED_SYMBOLS)" }]*/
-var EXPORTED_SYMBOLS = ["config"];
+const EXPORTED_SYMBOLS = ["config"];
 
-var config = {
+const config = {
   PREF_TP_ENABLED_GLOBALLY: "privacy.trackingprotection.enabled",
   PREF_TP_ENABLED_IN_PRIVATE_WINDOWS: "privacy.trackingprotection.pbmode.enabled",
 
