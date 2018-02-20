@@ -60,7 +60,7 @@ body {
 }
 
 #tracking-protection-study-page-action-main {
- margin-top: 20px; 
+  margin-top: 20px;
 }
 
 #tracking-protection-study-page-action-main > div {
@@ -159,7 +159,7 @@ body {
 }
 
 .tracking-protection-study-default-button:focus {
-    box-shadow: inset 2px 2px #0a84ff, 3px 3px rgba(10, 132, 255, .3);
+  box-shadow: inset 2px 2px #0a84ff, 3px 3px rgba(10, 132, 255, .3);
 }
 
 #tracking-protection-study-confirmation-secondary-button {
