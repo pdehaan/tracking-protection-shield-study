@@ -59,7 +59,7 @@ class Feature {
    * @param {Object} options.studyUtils The configured studyUtils singleton.
    * @param {string} options.reasonName String of bootstrap.js startup/shutdown reason.
    * @param {string} options.logLevel   The log level from Config.jsm (uses same level as bootstrap.js).
-   * @returns {void}                    NEEDS_DOC
+   * @returns {void}
    */
   constructor({variation, studyUtils, reasonName, logLevel}) {
     this.treatment = variation.name;
@@ -352,7 +352,7 @@ class Feature {
    * own separate event.
    *
    * @param {ChromeWindow} win NEEDS_DOC
-   * @returns {void}           NEEDS_DOC
+   * @returns {void}
   */
   addWindowEventListeners(win) {
     if (win && win.gBrowser) {
@@ -389,10 +389,19 @@ class Feature {
     }
   }
 
-  // This method is called when opening a new tab among many other times.
-  // This is a listener for the addTabsProgressListener
-  // Not appropriate for modifying the page itself because the page hasn't
-  // finished loading yet. More info: https://tinyurl.com/lpzfbpj
+  /**
+   * This method is called when opening a new tab among many other times.
+   * This is a listener for the addTabsProgressListener
+   * Not appropriate for modifying the page itself because the page hasn't
+   * finished loading yet. More info: https://tinyurl.com/lpzfbpj
+   *
+   * @param  {Object} browser  NEEDS_DOC
+   * @param  {Object} progress NEEDS_DOC
+   * @param  {Object} request  NEEDS_DOC
+   * @param  {Object} uri      NEEDS_DOC
+   * @param  {number} flags    NEEDS_DOC
+   * @returns {void}
+   */
   onLocationChange(browser, progress, request, uri, flags) {
     // only show pageAction icon and panels on http(s) pages
     if (uri.scheme !== "http" && uri.scheme !== "https") {
@@ -430,7 +439,7 @@ class Feature {
    * Only one icon in URL across all tabs, have to update it per page.
    *
    * @param {Object} evt NEEDS_DOC
-   * @returns {void} NEEDS_DOC
+   * @returns {void}
    */
   onTabChange(evt) {
     // Hide intro panel on tab change if showing
@@ -481,7 +490,7 @@ class Feature {
    * @param   {ChromeWindow}  win    NEEDS_DOC
    * @param   {string}  message      NEEDS_DOC
    * @param   {boolean} isIntroPanel NEEDS_DOC
-   * @returns {void}                 NEEDS_DOC
+   * @returns {void}
    */
   showPanel(win, message, isIntroPanel) {
     // don't show the pageAction panel before the intro panel has been shown
@@ -611,7 +620,13 @@ class Feature {
       }));
   }
 
-  // This is a method my page scripts can call to pass messages to the JSM
+  /**
+   * This is a method my page scripts can call to pass messages to the JSM.
+   *
+   * @param  {string} message NEEDS_DOC
+   * @param  {Object} data    NEEDS_DOC
+   * @returns {void}
+   */
   sendMessageToChrome(message, data) {
     this.handleUIEvent(message, data);
   }
@@ -717,7 +732,7 @@ class Feature {
    * NEEDS_DOC
    *
    * @param   {Object} data A string:string key:value object.
-   * @returns {void} NEEDS_DOC
+   * @returns {void}
    */
   async telemetry(data) {
     this.studyUtils.telemetry(data);
@@ -918,7 +933,7 @@ class Feature {
    * Shows the page action button.
    *
    * @param {document} doc The browser.xul document for the page action.
-   * @returns {void}  NEEDS_DOC
+   * @returns {void}
    */
   showPageAction(doc) {
     const urlbar = doc.getElementById("page-action-buttons");
@@ -996,7 +1011,6 @@ class Feature {
   }
 
   async uninit() {
-
     // Shutdown intro panel or pageAction panel, if either is active
     if (this.weakEmbeddedBrowser) {
       try {

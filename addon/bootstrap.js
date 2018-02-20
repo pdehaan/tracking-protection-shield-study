@@ -209,7 +209,7 @@ this.Bootstrap = {
    *
    * @param {Object} addonData NEEDS_DOC
    * @param {string} reason    NEEDS_DOC
-   * @returns {void}           NEEDS_DOC
+   * @returns {void}
    */
   async shutdown(addonData, reason) {
     this.log.debug("shutdown", this.REASONS[reason] || reason);

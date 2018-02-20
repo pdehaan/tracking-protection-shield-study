@@ -14,12 +14,12 @@ module.exports = {
     }
   },
   env: {
-    "es6": true,
-    // "browser-window": false
+    "es6": true
 
   },
   extends: [
     "eslint:recommended",
+    "plugin:jsdoc/recommended",
     /* list of rules at:
      * https://dxr.mozilla.org/mozilla-central/source/tools/lint/eslint/eslint-plugin-mozilla/lib/configs/recommended.js
      */
@@ -34,16 +34,7 @@ module.exports = {
 
   rules: {
     "babel/new-cap": "off",
-    "jsdoc/check-param-names": "warn",
-    "jsdoc/check-tag-names": "warn",
-    "jsdoc/check-types": "warn",
-    "jsdoc/newline-after-description": "warn",
-    "jsdoc/require-param": "warn",
-    "jsdoc/require-param-description": "warn",
-    "jsdoc/require-param-name": "warn",
-    "jsdoc/require-param-type": "warn",
-    "jsdoc/require-returns-description": "warn",
-    "jsdoc/require-returns-type": "warn",
+    "jsdoc/require-returns-description": "off",
     "mozilla/balanced-listeners": "error",
     "mozilla/no-aArgs": "warn",
     "mozilla/use-chromeutils-import": "off", // TODO: "warn"?
@@ -55,7 +46,7 @@ module.exports = {
     "no-shadow": "error",
     "no-unused-vars": "error",
     "no-var": "error",
-    "no-warning-comments": ["warn", {"terms": ["todo", "fixme", "needs_doc", "xxx"], "location": "anywhere"}],
+    "no-warning-comments": ["warn", {"terms": ["todo", "fixme", /* TODO: add "needs_doc", */ "xxx"], "location": "anywhere"}],
     "prefer-const": "warn",
     "prefer-spread": "error",
     "semi": ["error", "always"],
