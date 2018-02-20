@@ -20,7 +20,6 @@ XPCOMUtils.defineLazyModuleGetter(this, "Feature",
   `resource://${STUDY}/lib/Feature.jsm`);
 
 this.Bootstrap = {
-
   UI_AVAILABLE_NOTIFICATION: "sessionstore-windows-restored",
   VARIATION_OVERRIDE_PREF:
     "extensions.tracking_protection_messaging_study.variation_override",
@@ -31,11 +30,11 @@ this.Bootstrap = {
   STUDY_DURATION_WEEKS: 2,
 
   /**
-   * TODO
+   * NEEDS_DOC
    *
    * @param   {Object} addonData [ "id", "version", "installPath", "resourceURI", "instanceID", "webExtension" ]  bootstrap.js:48
-   * @param   {string} reason    TODO
-   * @returns {Promise<void>}    TODO
+   * @param   {string} reason    NEEDS_DOC
+   * @returns {Promise<void>}    NEEDS_DOC
    */
   async startup(addonData, reason) {
     this.REASONS = studyUtils.REASONS;
@@ -97,7 +96,7 @@ this.Bootstrap = {
    * Create a new instance of the ConsoleAPI, so we can control
    * the maxLogLevel with Config.jsm.
    *
-   * @returns {ConsoleAPI} TODO
+   * @returns {ConsoleAPI} NEEDS_DOC
    */
   initLog() {
     XPCOMUtils.defineLazyGetter(this, "log", () => {
@@ -121,7 +120,7 @@ this.Bootstrap = {
   /**
    * Choose the variation for this particular user, then set it.
    *
-   * @returns {Object} TODO
+   * @returns {Object} NEEDS_DOC
    */
   async selectVariation() {
     const variation = this.getVariationFromPref(config.weightedVariations) ||
@@ -135,8 +134,8 @@ this.Bootstrap = {
   /**
    * Helper to let Dev or QA set the variation name
    *
-   * @param   {Array} weightedVariations TODO
-   * @returns {string} TODO
+   * @param   {Array} weightedVariations NEEDS_DOC
+   * @returns {string} NEEDS_DOC
    */
   getVariationFromPref(weightedVariations) {
     const name = Services.prefs.getCharPref(this.VARIATION_OVERRIDE_PREF, "");
@@ -169,7 +168,7 @@ this.Bootstrap = {
   /**
    * helper to let Dev or QA set the study duration
    *
-   * @returns {boolean} TODO
+   * @returns {boolean} NEEDS_DOC
    */
   getDurationFromPref() {
     return Services.prefs.getIntPref(this.DURATION_OVERRIDE_PREF, "");
@@ -208,9 +207,9 @@ this.Bootstrap = {
    *
    * `studyUtils._isEnding` means this is a '2nd shutdown'.
    *
-   * @param {Object} addonData TODO
-   * @param {string} reason    TODO
-   * @returns {void}           TODO
+   * @param {Object} addonData NEEDS_DOC
+   * @param {string} reason    NEEDS_DOC
+   * @returns {void}           NEEDS_DOC
    */
   async shutdown(addonData, reason) {
     this.log.debug("shutdown", this.REASONS[reason] || reason);

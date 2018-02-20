@@ -59,7 +59,7 @@ class Feature {
    * @param {Object} options.studyUtils The configured studyUtils singleton.
    * @param {string} options.reasonName String of bootstrap.js startup/shutdown reason.
    * @param {string} options.logLevel   The log level from Config.jsm (uses same level as bootstrap.js).
-   * @returns {void}                    TODO
+   * @returns {void}                    NEEDS_DOC
    */
   constructor({variation, studyUtils, reasonName, logLevel}) {
     this.treatment = variation.name;
@@ -195,8 +195,8 @@ class Feature {
    * Create a new instance of the ConsoleAPI, so we can control
    * the maxLogLevel with Config.jsm.
    *
-   * @param {string} logLevel TODO
-   * @returns {ConsoleAPI}    TODO
+   * @param {string} logLevel NEEDS_DOC
+   * @returns {ConsoleAPI}    NEEDS_DOC
    */
   initLog(logLevel) {
     XPCOMUtils.defineLazyGetter(this, "log", () => {
@@ -351,8 +351,8 @@ class Feature {
    * Each one needs its own separate handler, because each one is detected by its
    * own separate event.
    *
-   * @param {ChromeWindow} win TODO
-   * @returns {void}           TODO
+   * @param {ChromeWindow} win NEEDS_DOC
+   * @returns {void}           NEEDS_DOC
   */
   addWindowEventListeners(win) {
     if (win && win.gBrowser) {
@@ -429,8 +429,8 @@ class Feature {
    * Fox tab and back to CNN, you want counter to change back to CNN count.
    * Only one icon in URL across all tabs, have to update it per page.
    *
-   * @param {Object} evt TODO
-   * @returns {void} TODO
+   * @param {Object} evt NEEDS_DOC
+   * @returns {void} NEEDS_DOC
    */
   onTabChange(evt) {
     // Hide intro panel on tab change if showing
@@ -478,10 +478,10 @@ class Feature {
    *   - {event: introduction-leave-study}
    * Note:  TODO bdanforth: Panel WILL NOT SHOW if the only window open is a private window.
    *
-   * @param   {ChromeWindow}  win    TODO
-   * @param   {string}  message      TODO
-   * @param   {boolean} isIntroPanel TODO
-   * @returns {void}                 TODO
+   * @param   {ChromeWindow}  win    NEEDS_DOC
+   * @param   {string}  message      NEEDS_DOC
+   * @param   {boolean} isIntroPanel NEEDS_DOC
+   * @returns {void}                 NEEDS_DOC
    */
   showPanel(win, message, isIntroPanel) {
     // don't show the pageAction panel before the intro panel has been shown
@@ -714,10 +714,10 @@ class Feature {
   }
 
   /**
-   * TODO
+   * NEEDS_DOC
    *
    * @param   {Object} data A string:string key:value object.
-   * @returns {void} TODO
+   * @returns {void} NEEDS_DOC
    */
   async telemetry(data) {
     this.studyUtils.telemetry(data);
@@ -779,7 +779,7 @@ class Feature {
   /**
    * Called when the browser is about to make a network request.
    *
-   * @param {Object} details TODO
+   * @param {Object} details NEEDS_DOC
    * @returns {BlockingResponse} data (determines whether or not
    * the request should be cancelled).
    * If this method returns `{}`, the request will not be blocked;
@@ -918,7 +918,7 @@ class Feature {
    * Shows the page action button.
    *
    * @param {document} doc The browser.xul document for the page action.
-   * @returns {void}  TODO
+   * @returns {void}  NEEDS_DOC
    */
   showPageAction(doc) {
     const urlbar = doc.getElementById("page-action-buttons");
