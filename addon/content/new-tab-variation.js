@@ -87,13 +87,13 @@ class TrackingProtectionStudy {
     }
   }
 
-  // timeSaved comes in as ms
+  // timeSaved comes in as s
   getHumanReadableTimeVals(timeSaved) {
     let timeStr = "";
     let timeSeconds,
       timeMinutes,
       timeHours;
-    timeSeconds = timeSaved / 1000;
+    timeSeconds = timeSaved;
     if (timeSeconds >= 60) {
       timeMinutes = timeSeconds / 60;
       timeSeconds = (timeMinutes % 1) * 60;

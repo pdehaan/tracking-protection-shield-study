@@ -835,15 +835,19 @@ class Feature {
         // If we get this far, we're going to block the request
         counter++;
         this.state.blockedResources.set(details.browser, counter);
-        this.state.blockedAds.set(details.browser, Math.floor(this.AD_FRACTION * counter));
         const timeSavedThisRequest = Math.min(Math.random() * (counter) * 1000, this.MAX_TIME_SAVED_FRACTION * counter * 1000);
         const timeSavedLastRequest = this.state.timeSaved.get(details.browser);
         if (timeSavedThisRequest > timeSavedLastRequest) {
           this.state.timeSaved.set(details.browser, timeSavedThisRequest);
-          this.state.totalTimeSaved += (timeSavedThisRequest - timeSavedLastRequest);
+          this.state.totalTimeSaved -= Math.ceil(timeSavedLastRequest / 1000);
+          this.state.totalTimeSaved += Math.ceil(timeSavedThisRequest / 1000);
         }
         this.state.totalBlockedResources += 1;
-        this.state.totalBlockedAds = Math.floor(this.AD_FRACTION * this.state.totalBlockedResources);
+        const adsBlockedLastRequest = this.state.blockedAds.get(details.browser);
+        const adsBlockedThisRequest = Math.floor(this.AD_FRACTION * counter);
+        this.state.totalBlockedAds -= Math.floor(adsBlockedLastRequest);
+        this.state.totalBlockedAds += Math.floor(adsBlockedThisRequest);
+        this.state.blockedAds.set(details.browser, Math.floor(this.AD_FRACTION * counter));
 
         Services.mm.broadcastAsyncMessage("TrackingStudy:UpdateContent", {
           blockedResources: this.state.totalBlockedResources,
