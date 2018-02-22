@@ -159,12 +159,19 @@ class TrackingProtectionStudy {
 addEventListener("load", handleLoad, true);
 
 function handleLoad(evt) {
-  const window = evt.target.defaultView;
-  const location = window.location.href;
+  const win = evt.target.defaultView;
+  const location = win.location.href;
   if (location === ABOUT_NEWTAB_URL || location === ABOUT_HOME_URL) {
+
+    Components.utils.import("resource://gre/modules/PrivateBrowsingUtils.jsm");
+    // Don't show new tab page variation in a Private Browsing window
+    if (PrivateBrowsingUtils.isContentWindowPrivate(win)) {
+      return;
+    }
+
     // queues a function to be called during a browser's idle periods
-    window.requestIdleCallback(() => {
-      new TrackingProtectionStudy(window);
+    win.requestIdleCallback(() => {
+      new TrackingProtectionStudy(win);
       sendAsyncMessage("TrackingStudy:InitialContent");
     });
   }
