@@ -92,6 +92,8 @@ class Feature {
 
     this.init(logLevel);
     this.initBehaviorSummary();
+
+    Services.prefs.setBoolPref("browser.newtab.preload", false);
   }
 
   async init(logLevel) {
@@ -677,7 +679,11 @@ class Feature {
         break;
       case "page-action-reject":
         this.log.debug("You clicked 'Disable Protection' on the pageAction panel.");
-        this.telemetry({ event: message });
+        this.telemetry({
+          message_type: "event",
+          event: "ui-event",
+          ui_event: message,
+        });
         break;
       case "page-action-confirmation-cancel":
         this.log.debug("You clicked 'Cancel' on the pageAction confirmation panel.");
@@ -1008,10 +1014,22 @@ class Feature {
           isIntroPanel
         );
 
+        let counter = this.treatment === "private" ?
+        this.state.blockedResources.get(win.gBrowser.selectedBrowser) :
+        this.state.timeSaved.get(win.gBrowser.selectedBrowser);
+
         // log page action click
         Storage.get("behavior-summary").then((behaviorSummary) => {
           let clicks = Number(behaviorSummary.badgeClicks) + 1;
           return Storage.update("behavior-summary", {badgeClicks: String(clicks)})
+        });
+
+        this.telemetry({
+          message_type: "event",
+          event: "page-action-click",
+          counter:  counter,
+          is_intro: String(isIntroPanel),
+          treatment: this.treatment
         });
 
       } else {
@@ -1036,12 +1054,6 @@ class Feature {
       // if "fast" treatment, convert counter from ms to seconds and add unit "s"
       const label = this.treatment === "private" ? counter
         : `${Math.ceil(counter / 1000)}s`;
-
-      this.telemetry({
-        message_type: "event",
-        event: "badge-counter",
-        value: String(counter)
-      })
       toolbarButton.setAttribute("label", label);
     }
   }
@@ -1055,6 +1067,9 @@ class Feature {
   }
 
   async endStudy(reason, shouldResetTP = true) {
+    await this.reportBehaviorSummary();
+    Services.prefs.clearUserPref("browser.newtab.preload");
+
     this.isStudyEnding = true;
     if (shouldResetTP) {
       this.resetBuiltInTrackingProtection();
@@ -1063,6 +1078,7 @@ class Feature {
   }
 
   async uninit() {
+    await this.reportBehaviorSummary();
 
     // Shutdown intro panel or pageAction panel, if either is active
     if (this.weakEmbeddedBrowser) {
