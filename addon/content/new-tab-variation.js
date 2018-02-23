@@ -25,12 +25,14 @@ class TrackingProtectionStudy {
     this.initTimer();
   }
 
+  sendOpenTime() {
+    sendAsyncMessage("TrackingStudy::NewTabOpenTime",
+        Math.floor(Date.now() / 1000) - this.openingTime);
+  }
+
   initTimer() {
     this.openingTime = Math.floor(Date.now() / 1000);
-    this.contentWindow.addEventListener("beforeunload", ()=> {
-      sendAsyncMessage("TrackingStudy::NewTabOpenTime",
-        Math.floor(Date.now() / 1000) - this.openingTime);
-    });
+    this.contentWindow.addEventListener("beforeunload", this.sendOpenTime.bind(this));
   }
 
   receiveMessage(msg) {
@@ -149,6 +151,7 @@ class TrackingProtectionStudy {
 
   onShutdown() {
     const doc = this.contentWindow.document;
+    this.contentWindow.removeEventListener("beforeunload", this.sendOpenTime.bind(this));
     removeMessageListener("TrackingStudy:InitialContent", this);
     removeMessageListener("TrackingStudy:UpdateContent", this);
     removeMessageListener("TrackingStudy:ShuttingDown", this);
