@@ -914,7 +914,7 @@ class Feature {
       pageActionButton.setAttribute("id", `${this.PAGE_ACTION_BUTTON_ID}`);
       pageActionButton.setAttribute(
         "image",
-        "chrome://browser/skin/controlcenter/tracking-protection.svg#enabled");
+        `resource://${STUDY}/content/tp-shield.svg`);
       pageActionButton.addEventListener("command", this.handlePageActionButtonCommandRef);
       // listener gets removed when hidePageAction is called or on uninit
 
