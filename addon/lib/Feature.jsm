@@ -385,29 +385,37 @@ class Feature {
   // Not appropriate for modifying the page itself because the page hasn't
   // finished loading yet. More info: https://tinyurl.com/lpzfbpj
   onLocationChange(browser, progress, request, uri, flags) {
-    // only show pageAction icon and panels on http(s) pages
-    if (uri.scheme !== "http" && uri.scheme !== "https") {
-      return;
-    }
 
     const LOCATION_CHANGE_SAME_DOCUMENT = 1;
     // ensure the location change event is occuring in the top frame (not an
     // iframe for example) and also that a different page is being loaded
-    if (progress.isTopLevel && flags !== LOCATION_CHANGE_SAME_DOCUMENT) {
-      this.showPageAction(browser.getRootNode());
-      this.setPageActionCounter(browser.getRootNode(), 0);
-      this.state.blockedResources.set(browser, 0);
-      this.state.blockedAds.set(browser, 0);
-      this.state.timeSaved.set(browser, 0);
-
-      // Hide intro panel on location change in the same tab if showing
-      if (this.state.introPanelIsShowing && this.weakIntroPanelBrowser.get() === browser) {
-        this.hidePanel("location-change-same-tab", true);
-      }
-      if (this.state.pageActionPanelIsShowing) {
-        this.hidePanel("location-change-same-tab", false);
-      }
+    if (!progress.isTopLevel || flags === LOCATION_CHANGE_SAME_DOCUMENT) {
+      return;
     }
+
+    // Hide panels on location change in the same tab if showing
+    if (this.state.introPanelIsShowing && this.weakIntroPanelBrowser.get() === browser) {
+      this.hidePanel("location-change-same-tab", true);
+    }
+    if (this.state.pageActionPanelIsShowing) {
+      this.hidePanel("location-change-same-tab", false);
+    }
+
+    const doc = browser.getRootNode();
+
+    // only show pageAction on http(s) pages
+    if (uri.scheme !== "http" && uri.scheme !== "https") {
+      this.hidePageAction(doc);
+      return;
+    }
+
+    // if we got this far, this is an http(s) page; show pageAction and
+    // reset per-page quantities
+    this.showPageAction(doc);
+    this.setPageActionCounter(doc, 0);
+    this.state.blockedResources.set(browser, 0);
+    this.state.blockedAds.set(browser, 0);
+    this.state.timeSaved.set(browser, 0);
 
     if (this.shouldShowIntroPanel) {
       this.weakIntroPanelBrowser = Cu.getWeakReference(browser);
