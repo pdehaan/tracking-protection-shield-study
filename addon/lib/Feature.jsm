@@ -589,10 +589,10 @@ class Feature {
   }
 
   updateQuantities(browser) {
-    const firstQuantity = this.state.blockedResources.get(browser);
+    const firstQuantity = this.state.blockedResources.get(browser) || 0;
     const secondQuantity = this.treatment === "fast"
-      ? this.state.timeSaved.get(browser)
-      : this.state.blockedAds.get(browser);
+      ? this.state.timeSaved.get(browser) || 0
+      : this.state.blockedAds.get(browser) || 0;
     // Let the page script know it can now send messages to JSMs,
     // since sendMessageToChrome has been exported
     this.weakEmbeddedBrowser.get().contentWindow.wrappedJSObject
