@@ -25,7 +25,13 @@ body {
 
 #tracking-protection-study-hero {
   display: block;
+  width: 96px;
+  height: 96px;
   margin-bottom: 15px;
+}
+
+#tracking-protection-study-hero path {
+  fill: #999999;
 }
 
 #tracking-protection-study-heading {
@@ -138,7 +144,13 @@ body {
 
 #tracking-protection-study-confirmation-hero {
   display: block;
+  width: 96px;
+  height: 96px;
   margin-bottom: 15px;
+}
+
+#tracking-protection-study-confirmation-hero path {
+  fill: #999999;
 }
 
 #tracking-protection-study-confirmation-main {

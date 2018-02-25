@@ -32,7 +32,12 @@ body {
 
 #tracking-protection-study-page-action-hero {
   width: 30px;
+  height: 30px;
   margin-right: 15px;
+}
+
+#tracking-protection-study-page-action-hero path {
+  fill: #058b00;
 }
 
 #tracking-protection-study-page-action-title {
@@ -113,7 +118,12 @@ body {
 
 #tracking-protection-study-page-action-confirmation-hero {
   width: 30px;
+  height: 30px;
   margin-right: 15px;
+}
+
+#tracking-protection-study-page-action-confirmation-hero path {
+  fill: #999999;
 }
 
 #tracking-protection-study-page-action-confirmation-title {
