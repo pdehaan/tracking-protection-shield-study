@@ -86,6 +86,7 @@ class Feature {
     this.handlePopupHiddenRef = this.handlePopupHidden.bind(this);
     this.onBeforeRequestRef = this.onBeforeRequest.bind(this);
     this.handleChromeWindowClickRef = this.handleChromeWindowClick.bind(this);
+    this.onWindowBlurRef = this.onWindowBlur.bind(this);
 
     this.init(logLevel);
   }
@@ -354,6 +355,7 @@ class Feature {
         "TabSelect",
         this.onTabChangeRef,
       );
+      win.addEventListener("blur", this.onWindowBlurRef);
     }
   }
 
@@ -364,6 +366,17 @@ class Feature {
         "TabSelect",
         this.onTabChangeRef,
       );
+      win.removeEventListener("blur", this.onWindowBlurRef);
+    }
+  }
+
+  // If the intro panel is open, hide it when its window blurs.
+  onWindowBlur(evt) {
+    const win = evt.target.ownerGlobal;
+    if (!this.state.introPanelIsShowing) {
+      return;
+    } else if (win === this.weakIntroPanelChromeWindow.get()) {
+      this.hidePanel("window-blur", true);
     }
   }
 
