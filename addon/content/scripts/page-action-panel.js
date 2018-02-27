@@ -102,7 +102,7 @@ class PageActionPanel {
   getHumanReadableTime(perPageTimeSaved) {
     let timeSaved = "";
     let timeUnit = "";
-    const timeSeconds = perPageTimeSaved / 1000;
+    const timeSeconds = Math.ceil(perPageTimeSaved / 1000);
     if (timeSeconds >= 60) {
       const timeMinutes = timeSeconds / 60;
       timeSaved += `${timeMinutes.toFixed(2)}`;
@@ -111,9 +111,9 @@ class PageActionPanel {
         timeUnit += "s";
       }
     } else {
-      timeSaved += `${Math.round(timeSeconds)}`;
+      timeSaved += timeSeconds;
       timeUnit += "second";
-      if (Math.round(timeSeconds) !== 1) {
+      if (timeSeconds !== 1) {
         timeUnit += "s";
       }
     }

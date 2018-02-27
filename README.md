@@ -6,6 +6,8 @@
 
 [Study UX](https://drive.google.com/file/d/0B8kj4Mlm-HJeVW5Dd3huVXg2OW8/view)
 
+[Bugzilla Bug](https://bugzilla.mozilla.org/show_bug.cgi?id=1433473)
+
 The purpose of this study is to test various types of messaging around [Tracking Protection](https://support.mozilla.org/en-US/kb/tracking-protection) in Firefox.
 
 ## Eligibility
