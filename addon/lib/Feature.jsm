@@ -81,7 +81,6 @@ class Feature {
 
     this.onTabChangeRef = this.onTabChange.bind(this);
     this.handlePageActionButtonCommandRef = this.handlePageActionButtonCommand.bind(this);
-    this.handleWindowClosingRef = this.handleWindowClosing.bind(this);
     this.handleEmbeddedBrowserLoadRef = this.handleEmbeddedBrowserLoad.bind(this);
     this.handlePopupShownRef = this.handlePopupShown.bind(this);
     this.handlePopupHiddenRef = this.handlePopupHidden.bind(this);
@@ -325,6 +324,9 @@ class Feature {
   unloadFromWindow(win) {
     this.removeWindowEventListeners(win);
     Services.wm.removeListener(this);
+    // handle the case where the window closed, but intro or pageAction panel
+    // is still open.
+    this.handleWindowClosing(win);
     const pageActionButton = win.document.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
     if (pageActionButton) {
       pageActionButton.removeEventListener("command", this.handlePageActionButtonCommandRef);
@@ -352,9 +354,6 @@ class Feature {
         "TabSelect",
         this.onTabChangeRef,
       );
-      // handle the case where the window closed, but intro or pageAction panel
-      // is still open.
-      win.addEventListener("SSWindowClosing", this.handleWindowClosingRef);
     }
   }
 
@@ -365,14 +364,11 @@ class Feature {
         "TabSelect",
         this.onTabChangeRef,
       );
-      win.removeEventListener("SSWindowClosing", this.handleWindowClosingRef);
     }
   }
 
-  handleWindowClosing(evt) {
-    const win = evt.target;
+  handleWindowClosing(win) {
     if (this.state.introPanelIsShowing && win === this.weakIntroPanelChromeWindow.get()) {
-      this.log.debug("about to hide introPanel");
       this.hidePanel("window-close", true);
     }
     if (this.state.pageActionPanelIsShowing && win === this.weakPageActionPanelChromeWindow.get()) {
