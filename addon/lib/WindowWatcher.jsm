@@ -11,6 +11,8 @@ const {utils: Cu} = Components;
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 XPCOMUtils.defineLazyModuleGetter(this, "Services",
   "resource://gre/modules/Services.jsm");
+XPCOMUtils.defineLazyModuleGetter(this, "PrivateBrowsingUtils",
+  "resource://gre/modules/PrivateBrowsingUtils.jsm");
 
 const EXPORTED_SYMBOLS = ["WindowWatcher"];
 
@@ -55,7 +57,9 @@ class WindowWatcherClass {
     const windows = Services.wm.getEnumerator("navigator:browser");
     while (windows.hasMoreElements()) {
       const win = windows.getNext();
-      if (win === Services.appShell.hiddenDOMWindow) {
+      // don't add anything to existing private or hidden windows
+      if (PrivateBrowsingUtils.isWindowPrivate(win)
+        || win === Services.appShell.hiddenDOMWindow) {
         continue;
       }
       try {
@@ -115,6 +119,10 @@ class WindowWatcherClass {
   _onWindowLoaded(evt) {
     const win = evt.target.ownerGlobal;
     win.removeEventListener("load", this._onWindowLoadedRef);
+    // don't add anything to new private windows
+    if (PrivateBrowsingUtils.isWindowPrivate(win)) {
+      return;
+    }
 
     // make sure we only add window listeners to a DOMWindow (browser.xul)
     const winType = win.document.documentElement.getAttribute("windowtype");

@@ -34,6 +34,8 @@ XPCOMUtils.defineLazyModuleGetter(this, "WebRequest",
   "resource://gre/modules/WebRequest.jsm");
 XPCOMUtils.defineLazyServiceGetter(this, "styleSheetService",
   "@mozilla.org/content/style-sheet-service;1", "nsIStyleSheetService");
+XPCOMUtils.defineLazyModuleGetter(this, "PrivateBrowsingUtils",
+  "resource://gre/modules/PrivateBrowsingUtils.jsm");
 // Import URL Web API into module
 Cu.importGlobalProperties(["URL"]);
 // Import addon-specific modules
@@ -86,7 +88,7 @@ class Feature {
     this.handlePopupHiddenRef = this.handlePopupHidden.bind(this);
     this.onBeforeRequestRef = this.onBeforeRequest.bind(this);
     this.handleChromeWindowClickRef = this.handleChromeWindowClick.bind(this);
-    this.onWindowBlurRef = this.onWindowBlur.bind(this);
+    this.onWindowDeactivateRef = this.onWindowDeactivate.bind(this);
 
     this.init(logLevel);
   }
@@ -355,7 +357,7 @@ class Feature {
         "TabSelect",
         this.onTabChangeRef,
       );
-      win.addEventListener("blur", this.onWindowBlurRef);
+      win.addEventListener("deactivate", this.onWindowDeactivateRef);
     }
   }
 
@@ -366,17 +368,18 @@ class Feature {
         "TabSelect",
         this.onTabChangeRef,
       );
-      win.removeEventListener("blur", this.onWindowBlurRef);
+      win.removeEventListener("deactivate", this.onWindowDeactivateRef);
     }
   }
 
-  // If the intro panel is open, hide it when its window blurs.
-  onWindowBlur(evt) {
-    const win = evt.target.ownerGlobal;
-    if (!this.state.introPanelIsShowing) {
-      return;
-    } else if (win === this.weakIntroPanelChromeWindow.get()) {
-      this.hidePanel("window-blur", true);
+  // Dismiss the intro panel if showing on window change
+  // Note: deactivate is only fired when the focus state changes for a top-level window.
+  // focus/blur events fire whenever focus changes for any DOM element
+  onWindowDeactivate(evt) {
+    const win = evt.target;
+    if (this.state.introPanelIsShowing
+      && win === this.weakIntroPanelChromeWindow.get()) {
+      this.hidePanel("window-deactivate", true);
     }
   }
 
@@ -394,7 +397,6 @@ class Feature {
   // Not appropriate for modifying the page itself because the page hasn't
   // finished loading yet. More info: https://tinyurl.com/lpzfbpj
   onLocationChange(browser, progress, request, uri, flags) {
-
     const LOCATION_CHANGE_SAME_DOCUMENT = 1;
     // ensure the location change event is occuring in the top frame (not an
     // iframe for example) and also that a different page is being loaded
@@ -448,6 +450,8 @@ class Feature {
     }
 
     const win = evt.target.ownerGlobal;
+
+
     const currentURI = win.gBrowser.currentURI;
 
     // Only show pageAction on http(s) pages
@@ -470,8 +474,8 @@ class Feature {
       if (!counter) {
         counter = 0;
       }
-      this.showPageAction(win.document);
-      this.setPageActionCounter(win.document, counter);
+      this.showPageAction(win.document, win);
+      this.setPageActionCounter(win.document, counter, win);
     }
   }
 
@@ -488,6 +492,12 @@ class Feature {
   * @param {String} url
   */
   showPanel(win, message, isIntroPanel) {
+    // If there's both a non-private and private window showing, we get window
+    // listeners from the non-private window calling showPanel
+    if (PrivateBrowsingUtils.isWindowPrivate(win)) {
+      return;
+    }
+
     // don't show the pageAction panel before the intro panel has been shown
     if (this.shouldShowIntroPanel && !this.introPanelIsShowing && !isIntroPanel) {
       return;
@@ -507,8 +517,8 @@ class Feature {
     if (!panel) {
       panel = this.getPanel(win, isIntroPanel);
     }
-    pageActionButton.append(panel);
 
+    pageActionButton.append(panel);
     panel.openPopup(pageActionButton);
 
     // if the user clicks off the panel, hide it
@@ -853,7 +863,7 @@ class Feature {
         counter++;
         this.state.blockedResources.set(details.browser, counter);
         const timeSavedThisRequest = Math.min(Math.random() * (counter) * 1000, this.MAX_TIME_SAVED_FRACTION * counter * 1000);
-        const timeSavedLastRequest = this.state.timeSaved.get(details.browser);
+        const timeSavedLastRequest = this.state.timeSaved.get(details.browser) || 0;
         if (timeSavedThisRequest > timeSavedLastRequest) {
           this.state.timeSaved.set(details.browser, timeSavedThisRequest);
           this.state.totalTimeSaved -= Math.ceil(timeSavedLastRequest / 1000);
@@ -890,7 +900,10 @@ class Feature {
           const win = enumerator.getNext();
           // Mac OS has an application window that keeps running even if all
           // normal Firefox windows are closed.
-          if (win === Services.appShell.hiddenDOMWindow) {
+          // Since WebRequest.onBeforeRequest isn't a window listener, we
+          // have to check for PB mode here too.
+          if (win === Services.appShell.hiddenDOMWindow
+            || PrivateBrowsingUtils.isWindowPrivate(win)) {
             continue;
           }
 
@@ -898,8 +911,8 @@ class Feature {
           // "private" treatment branch, otherwise we want to display timeSaved
           // for the "fast" treatment branch
           if (details.browser === win.gBrowser.selectedBrowser) {
-            this.showPageAction(browser.getRootNode());
-            this.setPageActionCounter(browser.getRootNode(), this.treatment === "private" ? counter : this.state.timeSaved.get(details.browser));
+            this.showPageAction(browser.getRootNode(), win);
+            this.setPageActionCounter(browser.getRootNode(), this.treatment === "private" ? counter : this.state.timeSaved.get(details.browser), win);
           }
         }
         return BLOCK_THE_REQUEST;
@@ -920,7 +933,13 @@ class Feature {
    *
    * @param {document} doc - the browser.xul document for the page action.
    */
-  showPageAction(doc) {
+  showPageAction(doc, win) {
+    // If we have both a non-private and private window open, the non-private
+    // window will try to show UI; instead we want the study to pause when a
+    // private window is open
+    if (PrivateBrowsingUtils.isWindowPrivate(win)) {
+      return;
+    }
     const urlbar = doc.getElementById("page-action-buttons");
 
     let pageActionButton = doc.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
@@ -959,9 +978,13 @@ class Feature {
     }
   }
 
-  setPageActionCounter(doc, counter) {
+  setPageActionCounter(doc, counter, win) {
+    // We could block resources in Private Browsing, but we don't want
+    // to trigger the intro panel until we're not in private browsing
+    if (PrivateBrowsingUtils.isWindowPrivate(win)) {
+      return;
+    }
     if (this.shouldShowIntroPanel && counter > 0) {
-      const win = Services.wm.getMostRecentWindow("navigator:browser");
       const isIntroPanel = true;
       this.showPanel(
         win,
