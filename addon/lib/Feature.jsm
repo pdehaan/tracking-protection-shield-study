@@ -88,7 +88,7 @@ class Feature {
     this.handlePopupHiddenRef = this.handlePopupHidden.bind(this);
     this.onBeforeRequestRef = this.onBeforeRequest.bind(this);
     this.handleChromeWindowClickRef = this.handleChromeWindowClick.bind(this);
-    this.onWindowBlurRef = this.onWindowBlur.bind(this);
+    this.onWindowDeactivateRef = this.onWindowDeactivate.bind(this);
 
     this.init(logLevel);
   }
@@ -357,7 +357,7 @@ class Feature {
         "TabSelect",
         this.onTabChangeRef,
       );
-      win.addEventListener("blur", this.onWindowBlurRef);
+      win.addEventListener("deactivate", this.onWindowDeactivateRef);
     }
   }
 
@@ -368,17 +368,18 @@ class Feature {
         "TabSelect",
         this.onTabChangeRef,
       );
-      win.removeEventListener("blur", this.onWindowBlurRef);
+      win.removeEventListener("deactivate", this.onWindowDeactivateRef);
     }
   }
 
-  // If the intro panel is open, hide it when its window blurs.
-  onWindowBlur(evt) {
-    const win = evt.target.ownerGlobal;
-    if (!this.state.introPanelIsShowing) {
-      return;
-    } else if (win === this.weakIntroPanelChromeWindow.get()) {
-      this.hidePanel("window-blur", true);
+  // Dismiss the intro panel if showing on window change
+  // Note: deactivate is only fired when the focus state changes for a top-level window.
+  // focus/blur events fire whenever focus changes for any DOM element
+  onWindowDeactivate(evt) {
+    const win = evt.target;
+    if (this.state.introPanelIsShowing
+      && win === this.weakIntroPanelChromeWindow.get()) {
+      this.hidePanel("window-deactivate", true);
     }
   }
 
@@ -421,8 +422,9 @@ class Feature {
 
     // if we got this far, this is an http(s) page; show pageAction and
     // reset per-page quantities
-    this.showPageAction(doc);
-    this.setPageActionCounter(doc, 0);
+    const win = browser.ownerGlobal;
+    this.showPageAction(doc, win);
+    this.setPageActionCounter(doc, 0, win);
     this.state.blockedResources.set(browser, 0);
     this.state.blockedAds.set(browser, 0);
     this.state.timeSaved.set(browser, 0);
