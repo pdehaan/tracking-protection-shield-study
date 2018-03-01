@@ -422,8 +422,9 @@ class Feature {
 
     // if we got this far, this is an http(s) page; show pageAction and
     // reset per-page quantities
-    this.showPageAction(doc);
-    this.setPageActionCounter(doc, 0);
+    const win = browser.ownerGlobal;
+    this.showPageAction(doc, win);
+    this.setPageActionCounter(doc, 0, win);
     this.state.blockedResources.set(browser, 0);
     this.state.blockedAds.set(browser, 0);
     this.state.timeSaved.set(browser, 0);
