@@ -155,6 +155,8 @@ class Feature {
       introPanelIsShowing: false,
       // Only update the values in the pageAction panel if it's showing
       pageActionPanelIsShowing: false,
+      // Only show the intro panel on install
+      shouldShowIntroPanel: false,
     };
 
     if (this.treatment in this.TREATMENTS) {
@@ -291,7 +293,7 @@ class Feature {
     // `./mach run` in the tree, ADDON_STARTUP is always the
     // reason code when Firefox starts up.
     if (this.reasonName === "ADDON_INSTALL") {
-      this.shouldShowIntroPanel = true;
+      this.state.shouldShowIntroPanel = true;
     }
 
     // 3. Add new tab variation
@@ -429,7 +431,7 @@ class Feature {
     this.state.blockedAds.set(browser, 0);
     this.state.timeSaved.set(browser, 0);
 
-    if (this.shouldShowIntroPanel) {
+    if (this.state.shouldShowIntroPanel) {
       this.weakIntroPanelBrowser = Cu.getWeakReference(browser);
     }
   }
@@ -500,7 +502,7 @@ class Feature {
     }
 
     // don't show the pageAction panel before the intro panel has been shown
-    if (this.shouldShowIntroPanel && !this.introPanelIsShowing && !isIntroPanel) {
+    if (this.state.shouldShowIntroPanel && !this.introPanelIsShowing && !isIntroPanel) {
       return;
     }
     if (isIntroPanel) {
@@ -964,18 +966,20 @@ class Feature {
     // Make sure the user clicked on the pageAction button, otherwise
     // once the intro panel is closed by the user clicking a button inside
     // of it, it will trigger the pageAction panel to open immediately.
-    if (evt.target.id === `${this.PAGE_ACTION_BUTTON_ID}`
-      && !this.state.introPanelIsShowing) {
-      if (!this.state.pageActionPanelIsShowing) {
-        const isIntroPanel = false;
-        this.showPanel(
-          win,
-          this.introPanelMessages[this.treatment],
-          isIntroPanel
-        );
-      } else {
-        this.hidePanel("page-action-click", false);
-      }
+    if (evt.target.id !== `${this.PAGE_ACTION_BUTTON_ID}`) {
+      return;
+    }
+    const isIntroPanel = this.state.introPanelIsShowing || this.state.shouldShowIntroPanel;
+    if (this.state.pageActionPanelIsShowing
+      || this.state.introPanelIsShowing) {
+      this.hidePanel("page-action-click", isIntroPanel);
+    } else {
+      this.showPanel(
+        win,
+        this.introPanelMessages[this.treatment],
+        isIntroPanel
+      );
+      if (isIntroPanel) this.state.shouldShowIntroPanel = false;
     }
   }
 
@@ -985,14 +989,14 @@ class Feature {
     if (PrivateBrowsingUtils.isWindowPrivate(win)) {
       return;
     }
-    if (this.shouldShowIntroPanel && counter > 0) {
+    if (this.state.shouldShowIntroPanel && counter > 0) {
       const isIntroPanel = true;
       this.showPanel(
         win,
         this.introPanelMessages[this.treatment],
         isIntroPanel
       );
-      this.shouldShowIntroPanel = false;
+      this.state.shouldShowIntroPanel = false;
     }
     const toolbarButton = doc.getElementById(`${this.PAGE_ACTION_BUTTON_ID}`);
     if (toolbarButton) {
