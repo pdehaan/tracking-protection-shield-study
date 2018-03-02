@@ -16,7 +16,7 @@ XPCOMUtils.defineLazyModuleGetter(this, "Services", "resource://gre/modules/Serv
 /* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(config|EXPORTED_SYMBOLS)" }]*/
 const EXPORTED_SYMBOLS = ["config"];
 // TODO change testing survey endings to production survey endings
-const SURVEY_URL = "https://qsurvey.mozilla.com/collab/tp-perception";
+const SURVEY_URL = "https://qsurvey.mozilla.com/s3/tp-perception";
 
 const config = {
   PREF_TP_ENABLED_GLOBALLY: "privacy.trackingprotection.enabled",
@@ -51,29 +51,29 @@ const config = {
     "endings": {
       /** standard endings */
       "user-disable": {
-        "baseUrl": `${SURVEY_URL}?action=disable&reason=user-disable`,
+        "baseUrl": `${SURVEY_URL}?reason=user-disable`,
       },
       "ineligible": {
         "baseUrl": null,
       },
       "expired": {
-        "baseUrl": `${SURVEY_URL}?action=eos&reason=expired`,
+        "baseUrl": `${SURVEY_URL}?reason=expired`,
       },
       /** User defined endings */
       "user-disabled-builtin-tracking-protection": {
-        "baseUrl": `${SURVEY_URL}?action=disable&reason=user-disabled-builtin-tracking-protection`,
+        "baseUrl": `${SURVEY_URL}?reason=user-disabled-builtin-tracking-protection`,
         "study_state": "ended-negative",  // neutral is default
       },
       "user-enabled-builtin-tracking-protection": {
-        "baseUrl": `${SURVEY_URL}?action=disable&reason=user-enabled-builtin-tracking-protection`,
+        "baseUrl": `${SURVEY_URL}?reason=user-enabled-builtin-tracking-protection`,
         "study_state": "ended-positive",
       },
       "introduction-confirmation-leave-study": {
-        "baseUrl": `${SURVEY_URL}?action=disable&reason=introduction-confirmation-leave-study`,
+        "baseUrl": `${SURVEY_URL}?reason=introduction-confirmation-leave-study`,
         "study_state": "ended-negative",
       },
       "page-action-confirmation-leave-study": {
-        "baseUrl": `${SURVEY_URL}?action=disable&reason=page-action-confirmation-leave-study`,
+        "baseUrl": `${SURVEY_URL}?reason=page-action-confirmation-leave-study`,
         "study_state": "ended-negative",
       },
     },
