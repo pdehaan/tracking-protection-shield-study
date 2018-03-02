@@ -4,7 +4,7 @@
 
 "use strict";
 
-/* global blocklists CleanupManager WindowWatcher */
+/* global blocklists CleanupManager WindowWatcher Storage */
 /* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(EXPORTED_SYMBOLS|Feature)" }] */
 
 /**
@@ -34,7 +34,7 @@ XPCOMUtils.defineLazyModuleGetter(this, "Services",
 XPCOMUtils.defineLazyModuleGetter(this, "ProfileAge",
   "resource://gre/modules/ProfileAge.jsm");
 XPCOMUtils.defineLazyModuleGetter(this, "AddonManager",
- "resource://gre/modules/AddonManager.jsm");
+  "resource://gre/modules/AddonManager.jsm");
 XPCOMUtils.defineLazyModuleGetter(this, "WebRequest",
   "resource://gre/modules/WebRequest.jsm");
 XPCOMUtils.defineLazyServiceGetter(this, "styleSheetService",
@@ -214,7 +214,7 @@ class Feature {
         this.telemetry({
           message_type: "event",
           event: "new-tab-closed",
-          newTabOpenTime: String(msg.data)
+          newTabOpenTime: String(msg.data),
         });
         this.addBehaviorMeasure("new_tab_open_times", msg.data);
         break;
@@ -248,19 +248,21 @@ class Feature {
 
     // does the user have any of the top adblockers?
     const ADBLOCKER_ID_LIST = [
-                                "{d10d0bf8-f5b5-c8b4-a8b2-2b9879e08c5d}", // AdblockPlus
-                                "uBlock0@raymondhill.net", // uBlock Origin
-                                "jid1-NIfFY2CA8fy1tg@jetpack" // Adblock for Firefox
-                              ];
+      "{d10d0bf8-f5b5-c8b4-a8b2-2b9879e08c5d}", // AdblockPlus
+      "uBlock0@raymondhill.net", // uBlock Origin
+      "jid1-NIfFY2CA8fy1tg@jetpack", // Adblock for Firefox
+    ];
     let containsAddon = false;
     AddonManager.getAllAddons().then((addons) => {
-      for (let addon of addons) {
-        if (ADBLOCKER_ID_LIST.includes(addon.id)) containsAddon = true;
+      for (const addon of addons) {
+        if (ADBLOCKER_ID_LIST.includes(addon.id)) {
+          containsAddon = true;
+        }
       }
-    })
+    });
 
     // co-variates
-    const oldestTimestamp = await ((new ProfileAge()).getOldestProfileTimestamp())
+    const oldestTimestamp = await ((new ProfileAge()).getOldestProfileTimestamp());
     const profileAgeDays = Math.round((Date.now() - oldestTimestamp) / (1000 * 3600 * 24));
     const dntEnabled = Services.prefs.getBoolPref("privacy.donottrackheader.enabled");
     const historyEnabled = Services.prefs.getBoolPref("places.history.enabled");
@@ -270,21 +272,21 @@ class Feature {
       reject: "false",
       intro_accept: "false",
       intro_reject: "false",
-      badge_clicks: String(0),
+      badge_clicks: "0",
       panel_open_times: JSON.stringify([]),
-      panel_open_times_median: String(0),
-      panel_open_times_mean: String(0),
+      panel_open_times_median: "0",
+      panel_open_times_mean: "0",
       new_tab_open_times: JSON.stringify([]),
-      new_tab_open_times_median: String(0),
-      new_tab_open_times_mean: String(0),
+      new_tab_open_times_median: "0",
+      new_tab_open_times_mean: "0",
       page_action_counter: JSON.stringify([]),
-      page_action_counter_median: String(0),
-      page_action_counter_mean: String(0),
+      page_action_counter_median: "0",
+      page_action_counter_mean: "0",
       covariates_profile_age: String(profileAgeDays),
       covariates_dnt_enabled: String(dntEnabled),
       covariates_history_enabled: String(historyEnabled),
       covariates_app_update_enabled: String(appUpdateEnabled),
-      covariates_has_adblocker: String(containsAddon)
+      covariates_has_adblocker: String(containsAddon),
     });
   }
 
@@ -314,7 +316,7 @@ class Feature {
           this.telemetry({
             message_type: "event",
             event: "study-ended",
-            reason: reason,
+            reason,
           });
           await this.endStudy(reason, false);
         }
@@ -845,10 +847,10 @@ class Feature {
     this.log.debug(`${panelType} shown.`);
     this.panelShownTime = Date.now();
     this.telemetry({
-        message_type: "event",
-        event: "panel-shown",
-        panel_type: panelType
-      });
+      message_type: "event",
+      event: "panel-shown",
+      panel_type: panelType,
+    });
   }
 
   handlePopupHidden() {
@@ -865,11 +867,11 @@ class Feature {
       Math.round((panelHiddenTime - this.panelShownTime) / 1000);
     this.log.debug(`${panelType} was open for ${panelOpenTime} seconds.`);
     this.telemetry({
-        message_type: "event",
-        event: "panel-hidden",
-        panel_type: panelType,
-        showTime: panelOpenTime.toString(),
-      });
+      message_type: "event",
+      event: "panel-hidden",
+      panel_type: panelType,
+      showTime: panelOpenTime.toString(),
+    });
     this.addBehaviorMeasure("panel_open_times", panelOpenTime);
   }
 
@@ -889,29 +891,31 @@ class Feature {
   }
 
   /**
-  * adds a new value for a measure to the behavior summary and updates its mean and median
-  * this is mainly used to get a summary of quantitative values that are recorded multiple times,
-  * such as how long the panel has been open
-  * @param {String} type - source of measure
-  * @param {Integer} value - measured value
-  */
+   * Adds a new value for a measure to the behavior summary and updates its mean and median
+   * this is mainly used to get a summary of quantitative values that are recorded multiple times,
+   * such as how long the panel has been open.
+   *
+   * @param {string} type source of measure
+   * @param {number} value measured value
+   * @returns {NEEDS_DOC} NEEDS_DOC
+   */
   async addBehaviorMeasure(type, value) {
 
     const median = function(arr) {
       arr = arr.slice(0).sort( (a, b) => a - b );
 
       return middle(arr);
-    }
+    };
 
     const middle = function(arr) {
       const len = arr.length;
       const half = Math.floor(len / 2);
 
-      if(len % 2)
+      if (len % 2) {
         return arr[half];
-      else
-        return (arr[half - 1] + arr[half]) / 2.0;
-    }
+      }
+      return (arr[half - 1] + arr[half]) / 2;
+    };
 
     const behaviorSummary = (await Storage.get("behavior-summary"));
     const valuesArr = JSON.parse(behaviorSummary[`${type}`]);
@@ -923,7 +927,7 @@ class Feature {
     return Storage.update("behavior-summary", {
       [`${type}`]: JSON.stringify(valuesArr),
       [`${type}_mean`]: String(meanValue),
-      [`${type}_median`]: String(medianValue)
+      [`${type}_median`]: String(medianValue),
     });
   }
 
@@ -1131,6 +1135,7 @@ class Feature {
    * Shows the page action button.
    *
    * @param {document} doc The browser.xul document for the page action.
+   * @param {NEEDS_DOC} win NEEDS_DOC
    * @returns {void}
    */
   showPageAction(doc, win) {
@@ -1176,15 +1181,17 @@ class Feature {
         this.introPanelMessages[this.treatment],
         isIntroPanel
       );
-      if (isIntroPanel) this.state.shouldShowIntroPanel = false;
-      
+      if (isIntroPanel) {
+        this.state.shouldShowIntroPanel = false;
+      }
+
       // record page action click event and badge count
-      let counter = this.treatment === "private" ?
+      const counter = this.treatment === "private" ?
         this.state.blockedResources.get(win.gBrowser.selectedBrowser) :
         Math.ceil(this.state.timeSaved.get(win.gBrowser.selectedBrowser) / 1000);
 
       Storage.get("behavior-summary").then((behaviorSummary) => {
-        let clicks = Number(behaviorSummary.badge_clicks) + 1;
+        const clicks = Number(behaviorSummary.badge_clicks) + 1;
         return Storage.update("behavior-summary", {badge_clicks: String(clicks)});
       });
 
@@ -1193,7 +1200,7 @@ class Feature {
         event: "page-action-click",
         counter:  String(counter),
         is_intro: String(isIntroPanel),
-        treatment: this.treatment
+        treatment: this.treatment,
       });
 
       this.addBehaviorMeasure("page_action_counter", counter);
