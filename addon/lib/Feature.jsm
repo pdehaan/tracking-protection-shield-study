@@ -30,6 +30,10 @@ const { interfaces: Ci, utils: Cu } = Components;
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 XPCOMUtils.defineLazyModuleGetter(this, "Services",
   "resource://gre/modules/Services.jsm");
+XPCOMUtils.defineLazyModuleGetter(this, "ProfileAge",
+  "resource://gre/modules/ProfileAge.jsm");
+XPCOMUtils.defineLazyModuleGetter(this, "AddonManager",
+ "resource://gre/modules/AddonManager.jsm");
 XPCOMUtils.defineLazyModuleGetter(this, "WebRequest",
   "resource://gre/modules/WebRequest.jsm");
 XPCOMUtils.defineLazyServiceGetter(this, "styleSheetService",
@@ -91,8 +95,11 @@ class Feature {
     this.handleChromeWindowClickRef = this.handleChromeWindowClick.bind(this);
 
     this.init(logLevel);
-    this.initBehaviorSummary();
 
+    // Because `about:newtab` is very complex (Activity Stream), it is by default
+    // preloaded after the first visit. Since our frame script measures time `about:newtab`
+    // is open based on the lifetime of the script, we need to turn off preloading to get an
+    // accurate measurement.
     Services.prefs.setBoolPref("browser.newtab.preload", false);
   }
 
@@ -194,11 +201,12 @@ class Feature {
         break;
       case "TrackingStudy::NewTabOpenTime":
         this.log.debug(`You opened a new tab page for ${msg.data} seconds.`);
-            this.telemetry({
-              message_type: "event",
-              event: "new-tab-closed",
-              time: String(msg.data)
-            });
+        this.telemetry({
+          message_type: "event",
+          event: "new-tab-closed",
+          newTabOpenTime: String(msg.data)
+        });
+        this.addBehaviorMeasure("new_tab_open_times", msg.data);
         break;
       default:
         throw new Error(`Message type not recognized, ${ msg.name }`);
@@ -225,11 +233,45 @@ class Feature {
     const initialized = (await Storage.has("behavior-summary"));
     if (initialized) return;
 
+    // does the user have any of the top adblockers?
+    const ADBLOCKER_ID_LIST = [
+                                "{d10d0bf8-f5b5-c8b4-a8b2-2b9879e08c5d}", // AdblockPlus
+                                "uBlock0@raymondhill.net", // uBlock Origin
+                                "jid1-NIfFY2CA8fy1tg@jetpack" // Adblock for Firefox
+                              ];
+    let containsAddon = false;
+    AddonManager.getAllAddons().then((addons) => {
+      for (let addon of addons) {
+        if (ADBLOCKER_ID_LIST.includes(addon.id)) containsAddon = true;
+      }
+    })
+
+    // co-variates
+    const oldestTimestamp = await ((new ProfileAge()).getOldestProfileTimestamp())
+    const ProfileAgeDays = Math.round((Date.now() - oldestTimestamp) / (1000 * 3600 * 24));
+    const dntEnabled = Services.prefs.getBoolPref("privacy.donottrackheader.enabled");
+    const historyEnabled = Services.prefs.getBoolPref("places.history.enabled");
+    const appUpdateEnabled = Services.prefs.getBoolPref("app.update.enabled");
+
     await Storage.create("behavior-summary", {
       reject: "false",
       intro_accept: "false",
       intro_reject: "false",
-      badgeClicks: String(0)
+      badge_clicks: String(0),
+      panel_open_times: String([]),
+      panel_open_times_median: String(0),
+      panel_open_times_mean: String(0),
+      new_tab_open_times: String([]),
+      new_tab_open_times_median: String(0),
+      new_tab_open_times_mean: String(0),
+      page_action_counter: String([]),
+      page_action_counter_median: String(0),
+      page_action_counter_mean: String(0),
+      covariates_profile_age: String(ProfileAgeDays),
+      covariates_dnt_enabled: String(dntEnabled),
+      covariates_history_enabled: String(historyEnabled),
+      covariates_app_update_enabled: String(appUpdateEnabled),
+      covariates_has_adblocker: String(containsAddon)
     });
   }
 
@@ -760,14 +802,15 @@ class Feature {
     this.log.debug(`${panelType} hidden.`);
     const panelHiddenTime = Date.now();
     const panelOpenTime =
-      (panelHiddenTime - this.panelShownTime) / 1000;
-    this.log.debug(`${panelType} was open for ${Math.round(panelOpenTime)} seconds.`);
+      Math.round((panelHiddenTime - this.panelShownTime) / 1000);
+    this.log.debug(`${panelType} was open for ${panelOpenTime} seconds.`);
     this.telemetry({
         message_type: "event",
         event: "panel-hidden",
         panel_type: panelType,
-        secondsPanelWasShowing: Math.round(panelOpenTime).toString(),
+        showTime: panelOpenTime.toString(),
       });
+    this.addBehaviorMeasure("panel_open_times", panelOpenTime);
   }
 
   // @param {Object} - data, a string:string key:value object
@@ -778,6 +821,45 @@ class Feature {
   async reportBehaviorSummary() {
     const behaviorSummary = await Storage.get("behavior-summary");
     return this.telemetry(Object.assign({message_type: "behavior_summary"}, behaviorSummary));
+  }
+
+  /**
+  * adds a new value for a measure to the behavior summary and updates its mean and median
+  * this is mainly used to get a summary of quantitative values that are recorded multiple times,
+  * such as how long the panel has been open
+  * @param {String} type - source of measure
+  * @param {Integer} value - measured value
+  */
+  async addBehaviorMeasure(type, value) {
+
+    const median = function(arr) {
+      arr = arr.slice(0).sort( (a, b) => a - b );
+
+      return middle(arr);
+    }
+
+    const middle = function(arr) {
+      const len = arr.length;
+      const half = Math.floor(len / 2);
+
+      if(len % 2)
+        return arr[half];
+      else
+        return (arr[half - 1] + arr[half]) / 2.0;
+    }
+
+    const behaviorSummary = (await Storage.get("behavior-summary"));
+    const valuesArr = valuesArr.length == 0 ? []: behaviorSummary[`${type}`].split(",").map(i => Number(i));
+    valuesArr.push(value);
+
+    const meanValue = valuesArr.reduce((acc, cV) => acc + cV) / valuesArr.length;
+    const medianValue = median(valuesArr);
+
+    return Storage.update("behavior-summary", {
+      [`${type}`]: String(valuesArr),
+      [`${type}_mean`]: String(meanValue),
+      [`${type}_median`]: String(medianValue)
+    });
   }
 
   async reimplementTrackingProtection(win) {
@@ -1016,21 +1098,23 @@ class Feature {
 
         let counter = this.treatment === "private" ?
         this.state.blockedResources.get(win.gBrowser.selectedBrowser) :
-        this.state.timeSaved.get(win.gBrowser.selectedBrowser);
+        Math.round(this.state.timeSaved.get(win.gBrowser.selectedBrowser) / 1000);
 
         // log page action click
         Storage.get("behavior-summary").then((behaviorSummary) => {
-          let clicks = Number(behaviorSummary.badgeClicks) + 1;
-          return Storage.update("behavior-summary", {badgeClicks: String(clicks)})
+          let clicks = Number(behaviorSummary.badge_clicks) + 1;
+          return Storage.update("behavior-summary", {badge_clicks: String(clicks)});
         });
 
         this.telemetry({
           message_type: "event",
           event: "page-action-click",
-          counter:  counter,
+          counter:  String(counter),
           is_intro: String(isIntroPanel),
           treatment: this.treatment
         });
+
+        this.addBehaviorMeasure("page_action_counter", counter);
 
       } else {
         this.hidePanel("page-action-click", false);
@@ -1067,7 +1151,7 @@ class Feature {
   }
 
   async endStudy(reason, shouldResetTP = true) {
-    await this.reportBehaviorSummary();
+    // returning the Activity Stream preloading to its default state
     Services.prefs.clearUserPref("browser.newtab.preload");
 
     this.isStudyEnding = true;

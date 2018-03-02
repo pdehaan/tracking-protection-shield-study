@@ -13,6 +13,8 @@ class TrackingProtectionStudy {
   constructor(contentWindow) {
     this.contentWindow = contentWindow;
     this.newTabMessage = "";
+    this.sendOpenTimeRef = this.sendOpenTime.bind(this);
+
     this.init();
   }
 
@@ -27,12 +29,12 @@ class TrackingProtectionStudy {
 
   sendOpenTime() {
     sendAsyncMessage("TrackingStudy::NewTabOpenTime",
-        Math.floor(Date.now() / 1000) - this.openingTime);
+        Math.round(Date.now() / 1000) - this.openingTime);
   }
 
   initTimer() {
     this.openingTime = Math.floor(Date.now() / 1000);
-    this.contentWindow.addEventListener("beforeunload", this.sendOpenTime.bind(this));
+    this.contentWindow.addEventListener("beforeunload", this.sendOpenTimeRef);
   }
 
   receiveMessage(msg) {
@@ -151,7 +153,7 @@ class TrackingProtectionStudy {
 
   onShutdown() {
     const doc = this.contentWindow.document;
-    this.contentWindow.removeEventListener("beforeunload", this.sendOpenTime.bind(this));
+    this.contentWindow.removeEventListener("beforeunload", this.sendOpenTimeRef);
     removeMessageListener("TrackingStudy:InitialContent", this);
     removeMessageListener("TrackingStudy:UpdateContent", this);
     removeMessageListener("TrackingStudy:ShuttingDown", this);

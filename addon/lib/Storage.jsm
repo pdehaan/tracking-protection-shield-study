@@ -83,7 +83,6 @@ const Storage = {
         `Cannot create value with key ${key}: a value exists with that key already.`,
       );
     }
-
     return getStore(db).add(value, key);
   },
 
