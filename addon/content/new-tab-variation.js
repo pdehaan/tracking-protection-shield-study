@@ -28,7 +28,7 @@ class TrackingProtectionStudy {
   }
 
   sendOpenTime() {
-    sendAsyncMessage("TrackingStudy::NewTabOpenTime",
+    sendAsyncMessage("TrackingStudy:NewTabOpenTime",
         Math.round(Date.now() / 1000) - this.openingTime);
   }
 

@@ -192,10 +192,10 @@ class Feature {
   addContentMessageListeners() {
     // content listener
     Services.mm.addMessageListener("TrackingStudy:InitialContent", this);
-    Services.mm.addMessageListener("TrackingStudy::NewTabOpenTime", this);
+    Services.mm.addMessageListener("TrackingStudy:NewTabOpenTime", this);
 
     CleanupManager.addCleanupHandler(() => Services.mm.removeMessageListener("TrackingStudy:InitialContent", this));
-    CleanupManager.addCleanupHandler(() => Services.mm.removeMessageListener("TrackingStudy::NewTabOpenTime", this));
+    CleanupManager.addCleanupHandler(() => Services.mm.removeMessageListener("TrackingStudy:NewTabOpenTime", this));
   }
 
   receiveMessage(msg) {
@@ -209,7 +209,7 @@ class Feature {
           newTabMessage: this.newTabMessages[this.treatment],
         });
         break;
-      case "TrackingStudy::NewTabOpenTime":
+      case "TrackingStudy:NewTabOpenTime":
         this.log.debug(`You opened a new tab page for ${msg.data} seconds.`);
         this.telemetry({
           message_type: "event",
@@ -261,7 +261,7 @@ class Feature {
 
     // co-variates
     const oldestTimestamp = await ((new ProfileAge()).getOldestProfileTimestamp())
-    const ProfileAgeDays = Math.round((Date.now() - oldestTimestamp) / (1000 * 3600 * 24));
+    const profileAgeDays = Math.round((Date.now() - oldestTimestamp) / (1000 * 3600 * 24));
     const dntEnabled = Services.prefs.getBoolPref("privacy.donottrackheader.enabled");
     const historyEnabled = Services.prefs.getBoolPref("places.history.enabled");
     const appUpdateEnabled = Services.prefs.getBoolPref("app.update.enabled");
@@ -271,16 +271,16 @@ class Feature {
       intro_accept: "false",
       intro_reject: "false",
       badge_clicks: String(0),
-      panel_open_times: String([]),
+      panel_open_times: JSON.stringify([]),
       panel_open_times_median: String(0),
       panel_open_times_mean: String(0),
-      new_tab_open_times: String([]),
+      new_tab_open_times: JSON.stringify([]),
       new_tab_open_times_median: String(0),
       new_tab_open_times_mean: String(0),
-      page_action_counter: String([]),
+      page_action_counter: JSON.stringify([]),
       page_action_counter_median: String(0),
       page_action_counter_mean: String(0),
-      covariates_profile_age: String(ProfileAgeDays),
+      covariates_profile_age: String(profileAgeDays),
       covariates_dnt_enabled: String(dntEnabled),
       covariates_history_enabled: String(historyEnabled),
       covariates_app_update_enabled: String(appUpdateEnabled),
@@ -914,14 +914,14 @@ class Feature {
     }
 
     const behaviorSummary = (await Storage.get("behavior-summary"));
-    const valuesArr = valuesArr.length == 0 ? []: behaviorSummary[`${type}`].split(",").map(i => Number(i));
+    const valuesArr = JSON.parse(behaviorSummary[`${type}`]);
     valuesArr.push(value);
 
     const meanValue = valuesArr.reduce((acc, cV) => acc + cV) / valuesArr.length;
     const medianValue = median(valuesArr);
 
     return Storage.update("behavior-summary", {
-      [`${type}`]: String(valuesArr),
+      [`${type}`]: JSON.stringify(valuesArr),
       [`${type}_mean`]: String(meanValue),
       [`${type}_median`]: String(medianValue)
     });
@@ -1181,7 +1181,7 @@ class Feature {
       // record page action click event and badge count
       let counter = this.treatment === "private" ?
         this.state.blockedResources.get(win.gBrowser.selectedBrowser) :
-        Math.round(this.state.timeSaved.get(win.gBrowser.selectedBrowser) / 1000);
+        Math.ceil(this.state.timeSaved.get(win.gBrowser.selectedBrowser) / 1000);
 
       Storage.get("behavior-summary").then((behaviorSummary) => {
         let clicks = Number(behaviorSummary.badge_clicks) + 1;
@@ -1233,9 +1233,6 @@ class Feature {
   }
 
   async endStudy(reason, shouldResetTP = true) {
-    // returning the Activity Stream preloading to its default state
-    Services.prefs.clearUserPref("browser.newtab.preload");
-
     this.isStudyEnding = true;
     if (shouldResetTP) {
       this.resetBuiltInTrackingProtection();
@@ -1244,7 +1241,9 @@ class Feature {
   }
 
   async uninit() {
-    await this.reportBehaviorSummary();
+    // returning the Activity Stream preloading to its default state
+    Services.prefs.clearUserPref("browser.newtab.preload");
+
     // Shutdown intro panel or pageAction panel, if either is active
     if (this.weakEmbeddedBrowser) {
       try {
