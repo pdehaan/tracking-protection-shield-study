@@ -5,28 +5,29 @@
 "use strict";
 
 /* global blocklists CleanupManager WindowWatcher */
-/* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(EXPORTED_SYMBOLS|Feature)" }]*/
+/* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(EXPORTED_SYMBOLS|Feature)" }] */
 
-/**  What this Feature does: TODO bdanforth: complete
-  *
-  *  UI:
-  *  - during INSTALL only, show an introductory panel with X options
-  *    - ((add options))
-  *  - ((add other UI features))
-  *
-  *  This module:
-  *  - Implements the 'introduction' to the 'tracking protection messaging' study, via panel.
-  *  - ((add other functionality))
-  *
-  *  Uses `studyUtils` API for:
-  *  - `telemetry` to instrument "shown", "accept", and "leave-study" events.
-  *  - `endStudy` to send a custom study ending.
-  *  - ((add other uses))
-  *  - ((get study ending URL(s) from rrayborn))
-  **/
+/**
+ * What this Feature does: TODO bdanforth: complete
+ *
+ *  UI:
+ *  - during INSTALL only, show an introductory panel with X options
+ *    - ((add options))
+ *  - ((add other UI features))
+ *
+ *  This module:
+ *  - Implements the 'introduction' to the 'tracking protection messaging' study, via panel.
+ *  - ((add other functionality))
+ *
+ *  Uses `studyUtils` API for:
+ *  - `telemetry` to instrument "shown", "accept", and "leave-study" events.
+ *  - `endStudy` to send a custom study ending.
+ *  - ((add other uses))
+ *  - ((get study ending URL(s) from rrayborn))
+ */
 
 // Import Firefox modules
-const { interfaces: Ci, utils: Cu } = Components;
+const { utils: Cu } = Components;
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 XPCOMUtils.defineLazyModuleGetter(this, "Services",
   "resource://gre/modules/Services.jsm");
@@ -52,12 +53,16 @@ XPCOMUtils.defineLazyModuleGetter(this, "WindowWatcher",
 const EXPORTED_SYMBOLS = ["Feature"];
 
 class Feature {
-  /** The study feature.
-    *  - variation: study info about particular client study variation
-    *  - studyUtils:  the configured studyUtils singleton.
-    *  - reasonName: string of bootstrap.js startup/shutdown reason
-    *  - logLevel: the log level from Config.jsm ( uses same level as bootstrap.js)
-    */
+  /**
+   * The study feature.
+   *
+   * @param {Object} options            Options object
+   * @param {Object} options.variation  Study info about particular client study variation.
+   * @param {Object} options.studyUtils The configured studyUtils singleton.
+   * @param {string} options.reasonName String of bootstrap.js startup/shutdown reason.
+   * @param {string} options.logLevel   The log level from Config.jsm (uses same level as bootstrap.js).
+   * @returns {void}
+   */
   constructor({variation, studyUtils, reasonName, logLevel}) {
     this.treatment = variation.name;
     this.studyUtils = studyUtils;
@@ -94,7 +99,6 @@ class Feature {
   }
 
   async init(logLevel) {
-
     this.initLog(logLevel);
 
     this.addContentMessageListeners();
@@ -191,10 +195,13 @@ class Feature {
     }
   }
 
-  /*
-  * Create a new instance of the ConsoleAPI, so we can control
-  * the maxLogLevel with Config.jsm.
-  */
+  /**
+   * Create a new instance of the ConsoleAPI, so we can control
+   * the maxLogLevel with Config.jsm.
+   *
+   * @param {string} logLevel NEEDS_DOC
+   * @returns {ConsoleAPI}    NEEDS_DOC
+   */
   initLog(logLevel) {
     XPCOMUtils.defineLazyGetter(this, "log", () => {
       const ConsoleAPI =
@@ -289,7 +296,7 @@ class Feature {
     // 2. Show intro panel if addon was just installed
     // Note: When testing with `npm run firefox`, ADDON_INSTALL
     // is always the reason code when Firefox starts up.
-    // Conversely, when testing with `./mach build` and 
+    // Conversely, when testing with `./mach build` and
     // `./mach run` in the tree, ADDON_STARTUP is always the
     // reason code when Firefox starts up.
     if (this.reasonName === "ADDON_INSTALL") {
@@ -344,13 +351,15 @@ class Feature {
   }
 
   /**
-  * Three cases of user looking at diff page:
-      - switched windows (onOpenWindow)
-      - loading new pages in the same tab (on page load in frame script)
-      - switching tabs but not switching windows (tabSelect)
-    Each one needs its own separate handler, because each one is detected by its
-    own separate event.
-  * @param {ChromeWindow} win
+   * Three cases of user looking at diff page:
+   *   - switched windows (onOpenWindow)
+   *   - loading new pages in the same tab (on page load in frame script)
+   *   - switching tabs but not switching windows (tabSelect)
+   * Each one needs its own separate handler, because each one is detected by its
+   * own separate event.
+   *
+   * @param {ChromeWindow} win NEEDS_DOC
+   * @returns {void}
   */
   addWindowEventListeners(win) {
     if (win && win.gBrowser) {
@@ -394,10 +403,19 @@ class Feature {
     }
   }
 
-  // This method is called when opening a new tab among many other times.
-  // This is a listener for the addTabsProgressListener
-  // Not appropriate for modifying the page itself because the page hasn't
-  // finished loading yet. More info: https://tinyurl.com/lpzfbpj
+  /**
+   * This method is called when opening a new tab among many other times.
+   * This is a listener for the addTabsProgressListener
+   * Not appropriate for modifying the page itself because the page hasn't
+   * finished loading yet. More info: https://tinyurl.com/lpzfbpj
+   *
+   * @param  {Object} browser  NEEDS_DOC
+   * @param  {Object} progress NEEDS_DOC
+   * @param  {Object} request  NEEDS_DOC
+   * @param  {Object} uri      NEEDS_DOC
+   * @param  {number} flags    NEEDS_DOC
+   * @returns {void}
+   */
   onLocationChange(browser, progress, request, uri, flags) {
     const LOCATION_CHANGE_SAME_DOCUMENT = 1;
     // ensure the location change event is occuring in the top frame (not an
@@ -437,11 +455,14 @@ class Feature {
   }
 
   /**
-  * Called when a non-focused tab is selected.
-  * If have CNN in one tab (with blocked elements) and Fox in another, go to 
-  * Fox tab and back to CNN, you want counter to change back to CNN count.
-  * Only one icon in URL across all tabs, have to update it per page.
-  */
+   * Called when a non-focused tab is selected.
+   * If have CNN in one tab (with blocked elements) and Fox in another, go to
+   * Fox tab and back to CNN, you want counter to change back to CNN count.
+   * Only one icon in URL across all tabs, have to update it per page.
+   *
+   * @param {Object} evt NEEDS_DOC
+   * @returns {void}
+   */
   onTabChange(evt) {
     // Hide intro panel on tab change if showing
     if (this.state.introPanelIsShowing) {
@@ -483,17 +504,18 @@ class Feature {
   }
 
   /**
-  * Display instrumented 'introductory panel' explaining the feature to the user
-  * Telemetry Probes:
-  *   - {event: introduction-shown}
-  *   - {event: introduction-accept}
-  *   - {event: introduction-leave-study}
-  * Note:  TODO bdanforth: Panel WILL NOT SHOW if the only window open is a private window.
-  *
-  * @param {ChromeWindow} win
-  * @param {String} message
-  * @param {String} url
-  */
+   * Display instrumented 'introductory panel' explaining the feature to the user
+   * Telemetry Probes:
+   *   - {event: introduction-shown}
+   *   - {event: introduction-accept}
+   *   - {event: introduction-leave-study}
+   * Note:  TODO bdanforth: Panel WILL NOT SHOW if the only window open is a private window.
+   *
+   * @param   {ChromeWindow}  win    NEEDS_DOC
+   * @param   {string}  message      NEEDS_DOC
+   * @param   {boolean} isIntroPanel NEEDS_DOC
+   * @returns {void}
+   */
   showPanel(win, message, isIntroPanel) {
     // If there's both a non-private and private window showing, we get window
     // listeners from the non-private window calling showPanel
@@ -628,7 +650,13 @@ class Feature {
       }));
   }
 
-  // This is a method my page scripts can call to pass messages to the JSM
+  /**
+   * This is a method my page scripts can call to pass messages to the JSM.
+   *
+   * @param  {string} message NEEDS_DOC
+   * @param  {Object} data    NEEDS_DOC
+   * @returns {void}
+   */
   sendMessageToChrome(message, data) {
     this.handleUIEvent(message, data);
   }
@@ -730,7 +758,12 @@ class Feature {
     });
   }
 
-  // @param {Object} - data, a string:string key:value object
+  /**
+   * NEEDS_DOC
+   *
+   * @param   {Object} data A string:string key:value object.
+   * @returns {void}
+   */
   async telemetry(data) {
     this.studyUtils.telemetry(data);
   }
@@ -740,7 +773,7 @@ class Feature {
     // TODO bdanforth: include a doc block with format/content for each
     // list/map/set in this.lists and this.state
     this.lists = {
-      // a map with each key a domain name of a known tracker and each value 
+      // a map with each key a domain name of a known tracker and each value
       // the domain name of the owning entity
       // (ex: "facebook.de" -> "facebook.com")
       blocklist: new Map(),
@@ -789,12 +822,14 @@ class Feature {
   }
 
   /**
-  * Called when the browser is about to make a network request.
-  * @returns {BlockingResponse} object (determines whether or not
-  * the request should be cancelled)
-  * If this method returns {}, the request will not be blocked;
-  * if it returns { cancel: true }, the request will be blocked.
-  */
+   * Called when the browser is about to make a network request.
+   *
+   * @param {Object} details NEEDS_DOC
+   * @returns {BlockingResponse} data (determines whether or not
+   * the request should be cancelled).
+   * If this method returns `{}`, the request will not be blocked;
+   * if it returns `{ cancel: true }`, the request will be blocked.
+   */
   onBeforeRequest(details) {
     const DONT_BLOCK_THE_REQUEST = {};
     const BLOCK_THE_REQUEST = { cancel: true };
@@ -934,7 +969,8 @@ class Feature {
   /**
    * Shows the page action button.
    *
-   * @param {document} doc - the browser.xul document for the page action.
+   * @param {document} doc The browser.xul document for the page action.
+   * @returns {void}
    */
   showPageAction(doc, win) {
     // If we have both a non-private and private window open, the non-private
@@ -1024,7 +1060,6 @@ class Feature {
   }
 
   async uninit() {
-
     // Shutdown intro panel or pageAction panel, if either is active
     if (this.weakEmbeddedBrowser) {
       try {

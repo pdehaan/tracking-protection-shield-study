@@ -105,9 +105,12 @@ class IntroPanel {
   }
 }
 
-// Dummy function to prevent error messages, since the same <browser>
-// is used for the intro panel and pageAction panel page.
-// Only the pageAction has content (TPNumbers) that needs to be updated
+/**
+ * Dummy function to prevent error messages, since the same <browser>
+ * is used for the intro panel and pageAction panel page.
+ * Only the pageAction has content (TPNumbers) that needs to be updated
+ */
+// eslint-disable-next-line no-unused-vars
 function updateTPNumbers(state) {
 
 }

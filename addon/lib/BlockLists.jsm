@@ -58,19 +58,19 @@ const blocklists = {
     // blocklist["google-analytics.com"] = http://www.google.com
     // etc.
     for (const categoryName in data.categories) {
-      var category = data.categories[categoryName];
-      var entityCount = category.length;
+      const category = data.categories[categoryName];
+      const entityCount = category.length;
 
-      for (var i = 0; i < entityCount; i++) {
-        var entity = category[i];
+      for (let i = 0; i < entityCount; i++) {
+        const entity = category[i];
 
         for (const entityName in entity) {
-          var urls = entity[entityName];
+          const urls = entity[entityName];
 
           for (const mainDomain in urls) {
             blocklist.set(mainDomain, []);
-            var domains = urls[mainDomain];
-            var domainsCount = domains.length;
+            const domains = urls[mainDomain];
+            const domainsCount = domains.length;
 
             for (let j = 0; j < domainsCount; j++) {
               blocklist.set(domains[j], mainDomain);
@@ -86,7 +86,7 @@ const blocklists = {
   // check if any host from lowest-level to top-level is in the blocklist
   hostInBlocklist(blocklist, host) {
     let requestHostInBlocklist = false;
-    var allHostVariants = this.allHosts(host);
+    const allHostVariants = this.allHosts(host);
     for (const hostVariant of allHostVariants) {
       requestHostInBlocklist = blocklist.has(hostVariant);
       if (requestHostInBlocklist) {
