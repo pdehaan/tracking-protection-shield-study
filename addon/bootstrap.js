@@ -20,7 +20,6 @@ XPCOMUtils.defineLazyModuleGetter(this, "Feature",
   `resource://${STUDY}/lib/Feature.jsm`);
 
 this.Bootstrap = {
-
   UI_AVAILABLE_NOTIFICATION: "sessionstore-windows-restored",
   VARIATION_OVERRIDE_PREF:
     "extensions.tracking_protection_messaging_study.variation_override",
@@ -31,9 +30,11 @@ this.Bootstrap = {
   STUDY_DURATION_WEEKS: 2,
 
   /**
-   * @param addonData Array [ "id", "version", "installPath", "resourceURI", "instanceID", "webExtension" ]  bootstrap.js:48
-   * @param reason
-   * @returns {Promise<void>}
+   * NEEDS_DOC
+   *
+   * @param   {Object} addonData [ "id", "version", "installPath", "resourceURI", "instanceID", "webExtension" ]  bootstrap.js:48
+   * @param   {string} reason    NEEDS_DOC
+   * @returns {Promise<void>}    NEEDS_DOC
    */
   async startup(addonData, reason) {
     this.REASONS = studyUtils.REASONS;
@@ -66,10 +67,8 @@ this.Bootstrap = {
       }
     }
 
-    /*
-    * Adds the study to the active list of telemetry experiments,
-    * and sends the "installed" telemetry ping if applicable
-    */
+    // Adds the study to the active list of telemetry experiments,
+    // and sends the "installed" telemetry ping if applicable
     await studyUtils.startup({reason});
 
     this.initStudyDuration();
@@ -90,10 +89,12 @@ this.Bootstrap = {
     }
   },
 
-  /*
-  * Create a new instance of the ConsoleAPI, so we can control
-  * the maxLogLevel with Config.jsm.
-  */
+  /**
+   * Create a new instance of the ConsoleAPI, so we can control
+   * the maxLogLevel with Config.jsm.
+   *
+   * @returns {ConsoleAPI} NEEDS_DOC
+   */
   initLog() {
     XPCOMUtils.defineLazyGetter(this, "log", () => {
       const ConsoleAPI =
@@ -113,7 +114,11 @@ this.Bootstrap = {
     studyUtils.setLoggingLevel(config.log.studyUtils.level);
   },
 
-  // choose the variation for this particular user, then set it.
+  /**
+   * Choose the variation for this particular user, then set it.
+   *
+   * @returns {Object} NEEDS_DOC
+   */
   async selectVariation() {
     const variation = this.getVariationFromPref(config.weightedVariations) ||
       await studyUtils.deterministicVariation(config.weightedVariations);
@@ -123,7 +128,12 @@ this.Bootstrap = {
     return variation;
   },
 
-  // helper to let Dev or QA set the variation name
+  /**
+   * Helper to let Dev or QA set the variation name
+   *
+   * @param   {Array} weightedVariations NEEDS_DOC
+   * @returns {string} NEEDS_DOC
+   */
   getVariationFromPref(weightedVariations) {
     const name = Services.prefs.getCharPref(this.VARIATION_OVERRIDE_PREF, "");
     if (name !== "") {
@@ -152,7 +162,11 @@ this.Bootstrap = {
     }
   },
 
-  // helper to let Dev or QA set the study duration
+  /**
+   * helper to let Dev or QA set the study duration
+   *
+   * @returns {boolean} NEEDS_DOC
+   */
   getDurationFromPref() {
     return Services.prefs.getIntPref(this.DURATION_OVERRIDE_PREF, "");
   },
@@ -188,7 +202,11 @@ this.Bootstrap = {
    * Shutdown needs to distinguish between USER-DISABLE and other
    * times that `endStudy` is called.
    *
-   * studyUtils._isEnding means this is a '2nd shutdown'.
+   * `studyUtils._isEnding` means this is a '2nd shutdown'.
+   *
+   * @param {Object} addonData NEEDS_DOC
+   * @param {string} reason    NEEDS_DOC
+   * @returns {void}
    */
   async shutdown(addonData, reason) {
     this.log.debug("shutdown", this.REASONS[reason] || reason);

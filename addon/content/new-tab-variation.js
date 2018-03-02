@@ -14,7 +14,7 @@ class TrackingProtectionStudy {
     this.contentWindow = contentWindow;
     this.newTabMessage = "";
     this.sendOpenTimeRef = this.sendOpenTime.bind(this);
-
+    this.RADIX = 10; // numerical base for parseInt
     this.init();
   }
 
@@ -56,7 +56,7 @@ class TrackingProtectionStudy {
         }
         break;
       case "TrackingStudy:UpdateContent":
-        this.updateTPNumbers(msg.data, doc);
+        this.addContentToNewTab(msg.data, doc);
         break;
       default:
         throw new Error(`Message name not recognized: ${msg.name}`);
@@ -64,29 +64,26 @@ class TrackingProtectionStudy {
   }
 
   addContentToNewTab(state, doc) {
-    const time = this.getHumanReadableTimeVals(state.timeSaved);
-
     // if we haven't blocked anything yet, don't modify the page
     if (state.blockedResources) {
       this.newTabMessage = state.newTabMessage;
       // Make a copy of message so we don't mutate the original string, which
-      // we need to preserve for updateTPNumbers.
-      let message = this.newTabMessage;
-      message = message.replace("${blockedRequests}", state.blockedResources);
-      message = message.replace("${blockedAds}", state.blockedAds);
-      message = message.replace("${time}", time);
+      // we need to preserve for updateMessage.
+      const message = this.updateMessage(state);
 
       // Check if the study UI has already been added to this page
       const tpContent = doc.getElementById(`${NEW_TAB_CONTAINER_DIV_ID}`);
       if (tpContent) {
         // if already on the page, just update the message
-        const spanEle = tpContent.getElementsByTagName("div")[0];
-        spanEle.innerHTML = message;
+        const tpContentChildEle = doc.getElementById(`${NEW_TAB_MESSAGE_DIV_ID}`);
+        // eslint-disable-next-line no-unsanitized/property
+        tpContentChildEle.innerHTML = message;
         return;
       }
 
       const div = doc.createElement("div");
       div.id = `${NEW_TAB_MESSAGE_DIV_ID}`;
+      // eslint-disable-next-line no-unsanitized/property
       div.innerHTML = message;
 
       const newContainer = doc.createElement("div");
@@ -125,6 +122,7 @@ class TrackingProtectionStudy {
       }
     }
     if (timeMinutes > 0) {
+      // eslint-disable-next-line no-nested-ternary
       timeStr += `${timeHours > 0 ? (timeSeconds > 0 ? "," : " and") : ""} <span class='tracking-protection-messaging-study-message-quantity'>${ Math.round(timeMinutes) }</span> minute`;
       if (Math.round(timeMinutes) > 1) {
         timeStr += "s";
@@ -139,16 +137,15 @@ class TrackingProtectionStudy {
     return timeStr;
   }
 
-  updateTPNumbers(state, doc) {
-    const time = this.getHumanReadableTimeVals(state.timeSaved);
-    const span = doc.getElementById(`${NEW_TAB_MESSAGE_DIV_ID}`);
-    if (span) {
-      let message = this.newTabMessage;
-      message = message.replace("${blockedRequests}", state.blockedResources);
-      message = message.replace("${blockedAds}", state.blockedAds);
-      message = message.replace("${time}", time);
-      span.innerHTML = message;
-    }
+  updateMessage(state) {
+    const parsedTime = this.getHumanReadableTimeVals(
+      parseInt(state.timeSaved, this.RADIX)
+    );
+    let message = this.newTabMessage;
+    message = message.replace("${blockedRequests}", parseInt(state.blockedResources, this.RADIX));
+    message = message.replace("${blockedAds}", parseInt(state.blockedAds, this.RADIX));
+    message = message.replace("${time}", parsedTime);
+    return message;
   }
 
   onShutdown() {
@@ -174,12 +171,19 @@ class TrackingProtectionStudy {
 addEventListener("load", handleLoad, true);
 
 function handleLoad(evt) {
-  const window = evt.target.defaultView;
-  const location = window.location.href;
+  const win = evt.target.defaultView;
+  const location = win.location.href;
   if (location === ABOUT_NEWTAB_URL || location === ABOUT_HOME_URL) {
+
+    Components.utils.import("resource://gre/modules/PrivateBrowsingUtils.jsm");
+    // Don't show new tab page variation in a Private Browsing window
+    if (PrivateBrowsingUtils.isContentWindowPrivate(win)) {
+      return;
+    }
+
     // queues a function to be called during a browser's idle periods
-    window.requestIdleCallback(() => {
-      new TrackingProtectionStudy(window);
+    win.requestIdleCallback(() => {
+      new TrackingProtectionStudy(win);
       sendAsyncMessage("TrackingStudy:InitialContent");
     });
   }

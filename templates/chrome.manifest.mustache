@@ -5,3 +5,5 @@ resource {{addon.chromeResource}} .
 {{! # source for the addon icon }}
 content {{addon.chromeResource}}-icons .
 
+override chrome://browser/content/aboutPrivateBrowsing.xhtml resource://{{addon.chromeResource}}/content/aboutPrivateBrowsingMod.xhtml
+
