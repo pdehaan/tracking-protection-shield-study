@@ -1,8 +1,9 @@
 /* Reference: firefox.design.com */
 
 body {
-  margin: 0;
   background-color: #fcfcfc;
+  margin: 0;
+  position: relative;
 }
 
 #tracking-protection-study-intro-panel-box {
@@ -31,7 +32,7 @@ body {
 }
 
 #tracking-protection-study-hero path {
-  fill: #999999;
+  fill: #999;
 }
 
 #tracking-protection-study-heading {
@@ -112,10 +113,6 @@ body {
 
 /* ----- CONFIRMATION SCREEN ----- */
 
-body {
-  position: relative;
-}
-
 #tracking-protection-study-confirmation-panel-box {
   position: absolute;
   top: 0;
@@ -150,7 +147,7 @@ body {
 }
 
 #tracking-protection-study-confirmation-hero path {
-  fill: #999999;
+  fill: #999;
 }
 
 #tracking-protection-study-confirmation-main {
