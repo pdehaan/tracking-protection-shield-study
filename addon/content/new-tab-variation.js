@@ -13,6 +13,7 @@ class TrackingProtectionStudy {
   constructor(contentWindow) {
     this.contentWindow = contentWindow;
     this.newTabMessage = "";
+    this.sendOpenTimeRef = this.sendOpenTime.bind(this);
     this.RADIX = 10; // numerical base for parseInt
     this.init();
   }
@@ -22,6 +23,18 @@ class TrackingProtectionStudy {
     addMessageListener("TrackingStudy:UpdateContent", this);
     addMessageListener("TrackingStudy:ShuttingDown", this);
     addMessageListener("TrackingStudy:Uninstalling", this);
+
+    this.initTimer();
+  }
+
+  sendOpenTime() {
+    sendAsyncMessage("TrackingStudy:NewTabOpenTime",
+        Math.round(Date.now() / 1000) - this.openingTime);
+  }
+
+  initTimer() {
+    this.openingTime = Math.floor(Date.now() / 1000);
+    this.contentWindow.addEventListener("beforeunload", this.sendOpenTimeRef);
   }
 
   receiveMessage(msg) {
@@ -137,6 +150,7 @@ class TrackingProtectionStudy {
 
   onShutdown() {
     const doc = this.contentWindow.document;
+    this.contentWindow.removeEventListener("beforeunload", this.sendOpenTimeRef);
     removeMessageListener("TrackingStudy:InitialContent", this);
     removeMessageListener("TrackingStudy:UpdateContent", this);
     removeMessageListener("TrackingStudy:ShuttingDown", this);

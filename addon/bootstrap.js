@@ -18,6 +18,8 @@ XPCOMUtils.defineLazyModuleGetter(this, "studyUtils",
   `resource://${STUDY}/lib/StudyUtils.jsm`);
 XPCOMUtils.defineLazyModuleGetter(this, "Feature",
   `resource://${STUDY}/lib/Feature.jsm`);
+XPCOMUtils.defineLazyModuleGetter(this, "Storage",
+  `resource://${STUDY}/lib/Storage.jsm`);
 
 this.Bootstrap = {
   UI_AVAILABLE_NOTIFICATION: "sessionstore-windows-restored",
@@ -225,6 +227,11 @@ this.Bootstrap = {
       // are still registered and receive it.
       // Tells already loaded frame scripts to shutdown
       Services.mm.broadcastAsyncMessage("TrackingStudy:Uninstalling");
+
+      if (this.feature)
+        await this.feature.reportBehaviorSummary();
+
+      await Storage.clear();
     }
 
     // Tells already loaded frame scripts to shutdown
