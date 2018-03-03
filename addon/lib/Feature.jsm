@@ -1075,6 +1075,7 @@ class Feature {
           blockedResources: this.state.totalBlockedResources,
           timeSaved: this.state.totalTimeSaved,
           blockedAds: this.state.totalBlockedAds,
+          newTabMessage: this.newTabMessages[this.treatment],
         });
         // If the pageAction panel is showing, update the quantities dynamically
         if (this.state.pageActionPanelIsShowing) {
