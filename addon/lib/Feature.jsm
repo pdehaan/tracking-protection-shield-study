@@ -573,8 +573,8 @@ class Feature {
       // depending on the treatment branch, we want the count of timeSaved
       // ("fast") or blockedResources ("private")
       let counter = this.treatment === "private" ?
-        this.state.blockedResources.get(win.gBrowser.selectedBrowser) :
-        this.state.timeSaved.get(win.gBrowser.selectedBrowser);
+        this.state.blockedResources.get(win.gBrowser.selectedBrowser) || 0 :
+        this.state.timeSaved.get(win.gBrowser.selectedBrowser) || 0;
       if (!counter) {
         counter = 0;
       }
@@ -1035,10 +1035,7 @@ class Feature {
       // Block third-party requests only.
       if (currentHost !== host
         && blocklists.hostInBlocklist(this.lists.blocklist, host)) {
-        let counter = 0;
-        if (this.state.blockedResources.has(details.browser)) {
-          counter = this.state.blockedResources.get(details.browser);
-        }
+        let counter = this.state.blockedResources.get(details.browser) || 0;
 
         const rootDomainHost = this.getRootDomain(host);
         const rootDomainCurrentHost = this.getRootDomain(currentHost);
@@ -1073,23 +1070,23 @@ class Feature {
           this.state.totalTimeSaved += Math.ceil(timeSavedThisRequest / 1000);
         }
         this.state.totalBlockedResources += 1;
-        const adsBlockedLastRequest = this.state.blockedAds.get(details.browser);
+        const adsBlockedLastRequest = this.state.blockedAds.get(details.browser) || 0;
         const adsBlockedThisRequest = Math.floor(this.AD_FRACTION * counter);
         this.state.totalBlockedAds -= Math.floor(adsBlockedLastRequest);
         this.state.totalBlockedAds += Math.floor(adsBlockedThisRequest);
         this.state.blockedAds.set(details.browser, Math.floor(this.AD_FRACTION * counter));
-
         Services.mm.broadcastAsyncMessage("TrackingStudy:UpdateContent", {
           blockedResources: this.state.totalBlockedResources,
           timeSaved: this.state.totalTimeSaved,
           blockedAds: this.state.totalBlockedAds,
+          newTabMessage: this.newTabMessages[this.treatment],
         });
         // If the pageAction panel is showing, update the quantities dynamically
         if (this.state.pageActionPanelIsShowing) {
           const firstQuantity = counter;
           const secondQuantity = this.treatment === "fast"
-            ? this.state.timeSaved.get(details.browser)
-            : this.state.blockedAds.get(details.browser);
+            ? this.state.timeSaved.get(details.browser) || 0
+            : this.state.blockedAds.get(details.browser) || 0;
           this.weakEmbeddedBrowser.get().contentWindow.wrappedJSObject
             .updateTPNumbers(JSON.stringify({
               treatment: this.treatment,
@@ -1114,8 +1111,11 @@ class Feature {
           // "private" treatment branch, otherwise we want to display timeSaved
           // for the "fast" treatment branch
           if (details.browser === win.gBrowser.selectedBrowser) {
+            const badgeValue = this.treatment === "private"
+              ? counter
+              : this.state.timeSaved.get(details.browser) || 0;
             this.showPageAction(browser.getRootNode(), win);
-            this.setPageActionCounter(browser.getRootNode(), this.treatment === "private" ? counter : this.state.timeSaved.get(details.browser), win);
+            this.setPageActionCounter(browser.getRootNode(), badgeValue, win);
           }
         }
         return BLOCK_THE_REQUEST;
@@ -1187,8 +1187,8 @@ class Feature {
 
       // record page action click event and badge count
       const counter = this.treatment === "private" ?
-        this.state.blockedResources.get(win.gBrowser.selectedBrowser) :
-        Math.ceil(this.state.timeSaved.get(win.gBrowser.selectedBrowser) / 1000);
+        this.state.blockedResources.get(win.gBrowser.selectedBrowser) || 0 :
+        Math.ceil((this.state.timeSaved.get(win.gBrowser.selectedBrowser) || 0) / 1000);
 
       Storage.get("behavior-summary").then((behaviorSummary) => {
         const clicks = Number(behaviorSummary.badge_clicks) + 1;
