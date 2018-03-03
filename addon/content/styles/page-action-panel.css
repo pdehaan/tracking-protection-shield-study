@@ -1,8 +1,9 @@
 /* Reference: firefox.design.com */
 
 body {
-  margin: 0;
   background-color: #fcfcfc;
+  margin: 0;
+  position: relative;
 }
 
 .tracking-protection-study-button {
@@ -60,7 +61,7 @@ body {
 }
 
 #tracking-protection-study-page-action-main {
- margin-top: 20px; 
+  margin-top: 20px;
 }
 
 #tracking-protection-study-page-action-main > div {
@@ -93,10 +94,6 @@ body {
 
 /* ----- CONFIRMATION SCREEN ----- */
 
-body {
-  position: relative;
-}
-
 #tracking-protection-study-page-action-confirmation-panel-box {
   position: absolute;
   top: 0;
@@ -123,7 +120,7 @@ body {
 }
 
 #tracking-protection-study-page-action-confirmation-hero path {
-  fill: #999999;
+  fill: #999;
 }
 
 #tracking-protection-study-page-action-confirmation-title {
@@ -159,7 +156,7 @@ body {
 }
 
 .tracking-protection-study-default-button:focus {
-    box-shadow: inset 2px 2px #0a84ff, 3px 3px rgba(10, 132, 255, .3);
+  box-shadow: inset 2px 2px #0a84ff, 3px 3px rgba(10, 132, 255, .3);
 }
 
 #tracking-protection-study-confirmation-secondary-button {
