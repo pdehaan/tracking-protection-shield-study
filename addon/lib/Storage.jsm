@@ -1,11 +1,11 @@
 "use strict";
 
-const { classes: Cc, interfaces: Ci, utils: Cu } = Components;
+const { utils: Cu } = Components;
 
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 XPCOMUtils.defineLazyModuleGetter(this, "IndexedDB", "resource://gre/modules/IndexedDB.jsm");
 
-this.EXPORTED_SYMBOLS = ["Storage"];
+const EXPORTED_SYMBOLS = ["Storage"];
 
 const DB_NAME = "tracking-protection-shield-study";
 const DB_OPTIONS = {
@@ -17,6 +17,7 @@ const DB_OPTIONS = {
  * Cache the database connection so that it is shared among multiple operations.
  */
 let databasePromise;
+
 async function getDatabase() {
   if (!databasePromise) {
     databasePromise = IndexedDB.open(DB_NAME, DB_OPTIONS, (db) => {
@@ -34,11 +35,15 @@ async function getDatabase() {
  * This is why the helper takes a database as an argument; if we fetched the
  * database in the helper directly, the helper would be async and the
  * transaction would expire before methods on the store were called.
+ *
+ * @param {NEEDS_DOC} db NEEDS_DOC
+ * @returns {NEEDS_DOC} NEEDS_DOC
  */
 function getStore(db) {
   return db.objectStore(DB_NAME, "readwrite");
 }
 
+// eslint-disable-next-line no-unused-vars
 const Storage = {
   async clear() {
     const db = await getDatabase();
