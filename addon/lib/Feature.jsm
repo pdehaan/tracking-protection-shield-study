@@ -142,8 +142,8 @@ class Feature {
     };
 
     this.newTabMessages = {
-      fast: "Firefox blocked <span class='tracking-protection-messaging-study-message-quantity'>${blockedRequests}</span> trackers and saved you ${time}",
-      private: "Firefox blocked <span class='tracking-protection-messaging-study-message-quantity'>${blockedRequests}</span> trackers and <span class='tracking-protection-messaging-study-message-quantity'>${blockedAds}</span> advertisements",
+      fast: "Firefox blocked <span class='tracking-protection-messaging-study-message-quantity'>${blockedRequests}</span> trackers and saved you ${time}.",
+      private: "Firefox blocked <span class='tracking-protection-messaging-study-message-quantity'>${blockedRequests}</span> trackers and <span class='tracking-protection-messaging-study-message-quantity'>${blockedAds}</span> advertisements.",
     };
 
     this.introPanelHeaders = {
