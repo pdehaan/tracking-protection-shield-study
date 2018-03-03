@@ -8,22 +8,37 @@
 /* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(EXPORTED_SYMBOLS|Feature)" }] */
 
 /**
- * What this Feature does: TODO bdanforth: complete
- *
- *  UI:
- *  - during INSTALL only, show an introductory panel with X options
- *    - ((add options))
- *  - ((add other UI features))
- *
  *  This module:
- *  - Implements the 'introduction' to the 'tracking protection messaging' study, via panel.
- *  - ((add other functionality))
+ *  - Reimplements built-in Tracking Protection (i.e. listens to every single web request on
+ *    every page) to record # blocked resources per page using WebRequest.onBeforeRequest.
+ *      - This requires modifying two Tracking Protection prefs; they are reset at the end
+ *        of the study unless the user ends the study by eplicitly modifying these prefs themselves.
+ *  - Implements UI as described below
+ *      - This requires disabling the newtab preloading pref. This is reset at the end of the study.
  *
  *  Uses `studyUtils` API for:
- *  - `telemetry` to instrument "shown", "accept", and "leave-study" events.
- *  - `endStudy` to send a custom study ending.
- *  - ((add other uses))
- *  - ((get study ending URL(s) from rrayborn))
+ *  - `telemetry` to instrument all UI events (e.g. when a panel is shown, when it is
+ *     dismissed, when a button is clicked, ...) and send a final summary ping on uninstall.
+ *  - `endStudy` to send custom study endings and open a survey.
+ *
+ * UI (in non-private windows only):
+ *  - during install only, show an introductory panel the first time the user visits
+ *    a http(s) page with blocked resources with 2 options
+ *    - continue with study
+ *    - disable study
+ *       - brings user to a confirmation screen inside the panel with 2 options
+ *          - Cancel
+ *          - Disable
+ *  - Adds a pageAction button with a badge to all http(s) pages
+ *    - badge shows # blocked resources ("private") or seconds of time saved ("fast")
+ *  - Clicking on the pageAction button opens a pageAction panel with 1 option
+ *    - Disable
+ *       - brings the user to a confirmation screen inside the panel with 2 options
+ *           - Cancel
+ *           - Disable
+ *  - When `about:newtab` is visited, modifies this page with a string telling
+ *    the user total resources blocked and either total ads blocked ("private")
+ *    or total time saved ("fast").
  */
 
 // Import Firefox modules
@@ -155,17 +170,21 @@ class Feature {
     // run once now on the most recent window.
     const win = Services.wm.getMostRecentWindow("navigator:browser");
 
+    /*
+    * Note: Why we are using <browser> as the key in each WeakMap in this.state:
+    * We may have the same site in multiple tabs. The <browser> element is per tab.
+    * The same site in two different tabs wouldn't share the same counter using <browser>.
+    * If we didn't do this, we might get two tabs loading the same page trying to
+    * update the same counter.
+    */
     this.state = {
       totalTimeSaved: 0,
       // a <browser>:counter map for the number of milliseconds saved for a particular browser
       timeSaved: new WeakMap(),
       // a <browser>:counter map for the number of blocked resources for a particular browser
-      // Why is this mapped with <browser>?
-      // You may have the same site in multiple tabs; should you use the same counter for both?
-      // the <browser> element is per tab. Fox News in two different tabs wouldn't share the same counter.
-      // if didn't do this, you might get two tabs loading the same page trying to update the same counter.
       blockedResources: new WeakMap(),
       totalBlockedResources: 0,
+      // a <browser>:counter map for the number of blocked ads for a particular browser
       blockedAds: new WeakMap(),
       totalBlockedAds: 0,
       // Checked by the pageAction panel's "command" event listener to make sure
@@ -584,12 +603,8 @@ class Feature {
   }
 
   /**
-   * Display instrumented 'introductory panel' explaining the feature to the user
-   * Telemetry Probes:
-   *   - {event: introduction-shown}
-   *   - {event: introduction-accept}
-   *   - {event: introduction-leave-study}
-   * Note:  TODO bdanforth: Panel WILL NOT SHOW if the only window open is a private window.
+   * Display instrumented panel (either the introduction panel or the pageAction panel).
+   * Note: Panel will not show in a private window.
    *
    * @param   {ChromeWindow}  win    NEEDS_DOC
    * @param   {string}  message      NEEDS_DOC
@@ -667,7 +682,6 @@ class Feature {
     } else {
       this.weakPageActionPanel = Cu.getWeakReference(panel);
     }
-    // TODO pass strings and values into this method to show up on the panel
     this.addBrowserContent();
     return panel;
   }
@@ -933,15 +947,38 @@ class Feature {
 
   async reimplementTrackingProtection(win) {
     // 1. get blocklist and allowlist
-    // TODO bdanforth: include a doc block with format/content for each
-    // list/map/set in this.lists and this.state
     this.lists = {
-      // a map with each key a domain name of a known tracker and each value
-      // the domain name of the owning entity
-      // (ex: "facebook.de" -> "facebook.com")
+      /*
+      * a string:string map with each key a domain name of a known tracker and each value
+      * the domain name of the owning entity:
+      * {
+      *  "facebook.com": "http://www.facebook.com/",
+      *  "2mdn.net": "http://www.google.com/",
+      *  ...
+      * }
+      */
       blocklist: new Map(),
-      // An object where top level keys are owning company names; each company
-      // key points to an object with a property and resource key.
+      /*
+      * An object of objects where the top level keys are owning company names; each company
+      * key points to an object with a property and resource key.
+      *  - 'properties' keys are first parties
+      *  - 'resources' keys are third parties
+      * {
+      *   365Media: {
+      *     properties: [
+      *       "aggregateintelligence.com",
+      *     ],
+      *     resources: [
+      *       "365dm.com",
+      *       ...
+      *     ],
+      *   }
+      *   4mads: {
+      *     ...
+      *   }
+      *   ...
+      * }
+      */
       entityList: {},
     };
 
@@ -1040,10 +1077,9 @@ class Feature {
         const rootDomainHost = this.getRootDomain(host);
         const rootDomainCurrentHost = this.getRootDomain(currentHost);
 
-        // check if host entity is in the entity list;
-        // TODO bdanforth: improve effeciency of this algo
+        // check if host entity is in the entity list
+        // A more efficient implementation can be found at:
         // https://github.com/mozilla/blok/blob/master/src/js/requests.js#L18-L27
-        // for a much more efficient implementation
         for (const entity in this.lists.entityList) {
           if (this.lists.entityList[entity].resources.includes(rootDomainHost)) {
             const resources = this.lists.entityList[entity].resources;

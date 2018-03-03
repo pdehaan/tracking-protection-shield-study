@@ -86,7 +86,6 @@ this.Bootstrap = {
     if (!Services.wm.getMostRecentWindow("navigator:browser")) {
       Services.obs.addObserver(this, this.UI_AVAILABLE_NOTIFICATION);
     } else {
-      // TODO bdanforth: check if window is private before adding UI
       this.addFeature(this.variation, this.reason);
     }
   },
@@ -112,7 +111,6 @@ this.Bootstrap = {
   initStudyUtils(id, version) {
     // validate study config
     studyUtils.setup({...config, addon: { id, version }});
-    // TODO bdanforth: patch studyUtils to setLoggingLevel as part of setup method
     studyUtils.setLoggingLevel(config.log.studyUtils.level);
   },
 
