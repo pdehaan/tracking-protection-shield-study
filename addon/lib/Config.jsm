@@ -78,7 +78,7 @@ const config = {
     },
     "telemetry": {
       "send": true, // assumed false. Actually send pings?
-      "removeTestingFlag": false,  // Marks pings as testing, set true for actual release
+      "removeTestingFlag": true,  // Marks pings as testing, set true for actual release
     },
   },
 
