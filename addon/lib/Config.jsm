@@ -15,7 +15,6 @@ XPCOMUtils.defineLazyModuleGetter(this, "Services", "resource://gre/modules/Serv
 
 /* eslint no-unused-vars: ["error", { "varsIgnorePattern": "(config|EXPORTED_SYMBOLS)" }]*/
 const EXPORTED_SYMBOLS = ["config"];
-// TODO change testing survey endings to production survey endings
 const SURVEY_URL = "https://qsurvey.mozilla.com/s3/tp-perception";
 
 const config = {
@@ -80,7 +79,6 @@ const config = {
     "telemetry": {
       "send": true, // assumed false. Actually send pings?
       "removeTestingFlag": false,  // Marks pings as testing, set true for actual release
-      // TODO "onInvalid": "throw"  // invalid packet for schema?  throw||log
     },
   },
 
