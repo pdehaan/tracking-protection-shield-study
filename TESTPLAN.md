@@ -1,161 +1,302 @@
-# Test Plan for the 57-Perception-Study Addon
+# Test plan for this add-on
 
-## Automated Testing
+## Preparations
 
-`npm test` verifies the telemetry payload as expected at firefox startup and add-on installation in a clean profile, then does **optimistic testing** of the *commonest path* though the study for a user
+### Make a clean profile in the right version of Firefox and set some preferences in `about:config`
+1. Download an [unbranded Beta](https://wiki.mozilla.org/Add-ons/Extension_Signing#Unbranded_Builds) version of Firefox.
+  - What is now Beta (Firefox 59) will be Release when this study is deployed.
+  - As of Firefox 57, unsigned legacy addons are [prohibited](https://wiki.mozilla.org/Add-ons/Firefox57) in Release and Beta channels, so that's why we have to use an unbranded build.
+  - When you open unbranded Firefox, you will notice the icon is a dark blue globe, not the Firefox logo. The window title will also say "Nightly". This is the unbranded part. You can confirm you have Firefox 59 installed by clicking the hamburger menu in the top right corner, selecting "Help" and then "Troubleshooting Information".
+2. Create a new profile at `about:profiles`.
+  - Set the profile as your default.
+  - Shutdown Beta Firefox and re-launch it for the changes to take effect.
+3. Go to `about:config` and set:
+  - `xpinstall.signatures.required`: `false`,
+    - This allows installing unsigned add-ons. It is only needed if the XPI is not signed.
+  - `extensions.legacy.enabled`: `true`
+    - This permits the loading of the legacy add-on since new versions of Firefox are allowing pure WebExtensions only.
 
-- prove the notification bar ui opens
-- *clicking on the left-most button presented*.
-- verifying that sent Telemetry is correct.
+### Set study-specific preferences and get the latest XPI
 
-Code at [./test/functional_test.js].
+1. Set `extensions.tracking_protection_messaging_study.variation_override` to `fast` or `private`. These are the two experimental branches.
+  - A list of all treatment branches in this study can be found in the [README](https://github.com/biancadanforth/tracking-protection-shield-study#treatment-branches).
+  - A list of all override preferences can be found in the [README](https://github.com/biancadanforth/tracking-protection-shield-study#testing-preferences).
+2. Get a copy of the study's XPI. There are three ways to do this:
+  1. Go to [this study's tracking bug](https://bugzilla.mozilla.org/show_bug.cgi?id=1433473) and install the latest signed XPI OR
+  2. Go to the [Releases](https://github.com/biancadanforth/tracking-protection-shield-study/releases) page of this repo and download the XPI from there. Note: It may be unsigned.
+  3. Using the [developer instructions](https://github.com/biancadanforth/tracking-protection-shield-study#development), find a copy of the unsigned XPI in the `./dist` folder.
 
-## Manual / QA TEST Instructions
+### Install the add-on and enroll in the study
 
-Assumptions / Thoughts
+1. Go to `about:addons`. In the "Extensions" tab, click the Gear icon in the top right corner of the page and select "Install Add-on From File...".
+2. Navigate to where the XPI is located on your local machine and open it.
+3. Click through the warnings and notifications that the add-on was installed.
 
-1.  Please ask if you want  more command-line tools to do this testing.
+## User Flow Overview
 
-### BEFORE EACH TEST: INSTALL THE ADDON to a CLEAN (NEW) PROFILE
+See the [User Flow](https://github.com/biancadanforth/tracking-protection-shield-study#user-flow) section of the README.
 
-0.  (create profile:  https://developer.mozilla.org/en-US/Firefox/Multiple_profiles, or via some other method)
-1.  In your Firefox profile
-2.  `about:debugging` > `install temporary addon`
+## Functional Tests to Perform
 
-As an alternative (command line) cli method:
+- When the user proactively changes the state of Tracking Protection (e.g. through `about:preferences` or `about:config`), the study ends, and their updated setting for Tracking Protection is not changed.
+- If the study runs to completion or the user uninstalls the add-on, the study ends, resetting Tracking Protection to its default value (ON in private windows only); #21 .
+- Check for correct surveys given study ending (see #23 ).
+  - A complete list of [study endings](https://github.com/biancadanforth/tracking-protection-shield-study#study-endings) can be found in the README. The only study ending that does NOT have a survey is `ineligible`.
+  - For each ending, the survey URL should be:
+    - <https://qsurvey.mozilla.com/s3/tp-perception?reason=user-disable>
+    - <https://qsurvey.mozilla.com/s3/tp-perception?reason=user-disabled-builtin-tracking-protection>
+    - <https://qsurvey.mozilla.com/s3/tp-perception?reason=page-action-confirmation-leave-study>
+    - <https://qsurvey.mozilla.com/s3/tp-perception?reason=user-enabled-builtin-tracking-protection>
+    - <https://qsurvey.mozilla.com/s3/tp-perception?reason=expired>
+    - <https://qsurvey.mozilla.com/s3/tp-perception?reason=introduction-confirmation-leave-study>
+- Check the study expiration end study condition and survey. See the [Debug](https://github.com/biancadanforth/tracking-protection-shield-study/blob/master/TESTPLAN.md#debug) section of this document for how to override the study duration and verify correct behavior.
+- Check that you don't see the pageAction unless on a http(s) page.
+- Check that you don't see the new tab variation/content until at least one resource is blocked during the session (blocked resources -- or a proxy of time saved for the "fast" branch -- are shown on the pageAction icon).
+- Check that you don't see the intro panel after addon install until the first time you visit a page and it has blocked resources (could visit biancadanforth.com to check this).
+- Check that the intro panel is dismissed by:
+  - a tab change
+  - a window close
+  - a location change in the same tab
+  - the user interacting with it
+  - the window the intro panel is currently in losing focus
+- Check that the intro panel is NOT dismissed by:
+  - the user clicking off of it
+- Check that the pageAction panel is triggered by:
+  - Clicking on the pageAction button, when the intro panel is NOT open.
+- Check that the pageAction panel is dismissed by:
+  - Clicking off the pageAction panel
+- Check that eligibility criteria are correctly met otherwise study ends #35  .
+- If the first site you visit after install has 0 blocked resources, clicking on the pageAction button will show the intro panel, see #110 .
+- Check that there is no UI/prompting in PB mode, see #86 .
 
-1. `git clone` the directory.
-2. `npm install` then `npm run firefox` from the Github (source) directory.
+1. Npm run firefox
+2. Open a new private window
+3. Visit `npr.org` in private window
+4. Notice there is no pageAction badge
+5. Visit `about:home` or `about:newtab`
+6. Notice there is no new tab variation content
+7. With the private window still open, open a new tab in the non-private window
+8. Notice the new tab variation is there and includes totals from the private window.
+9. In the non-private window, visit npr.org.
+10. Notice that the intro panel shows, since this is the first site you have visited in a non-private window since the study has been installed.
+- Check that the values in the pageAction panel are per-page (the first number should match the badge number of the pageAction). The values in this page should always be equal to or less than the values in the new tab variation, which are totals per session.
+- Verify that telemetry pings are correct per [TELEMETRY.md](./TELEMETRY.md).
+  - In particular, verify that for any of the [study endings](https://github.com/biancadanforth/tracking-protection-shield-study#study-endings) listed in the README, a summary ping is sent before the addon uninstalls.
 
+### How do I know if "telemetry pings are correct"?
 
-### Note: checking "Correct Pings"
+See the [Debug](https://github.com/biancadanforth/tracking-protection-shield-study/blob/master/TESTPLAN.md#debug) section of this document for an example of the correct telemetry for a common user flow.
 
-All interactions with the UI create sequences of Telemetry Pings.
+## Debug
 
-All UI `shield-study` `study_state` sequences look like this:
+### How to view log output
 
-- `enter => install => (one of: "voted" | "notification-x" |  "window-or-fx-closed") => exit`.
+* Open the Browser Console using Firefox's top menu at `Tools > Web Developer > Browser Console` (or CMD/CTRL + Shift + J). This will display Shield (loading/telemetry) log output from the add-on.
 
-(Note: this is complicated to explain, so please ask questions and I will try to write it up better!, see `TELMETRY.md` and EXAMPLE SEQUENCE below.)
+### How to view telemetry pings
 
-### Do these tests.
+_Before installing the study XPI_, install the Shield Study Helper Add-on available on the [Releases](https://github.com/biancadanforth/tracking-protection-shield-study/releases) page of this repo, @qa-shield-study-helper-1.0.0.xpi ([source code](https://github.com/mozilla/shield-studies-addon-utils/tree/master/shield-study-helper-addon)).
 
-1.  UI APPEARANCE.  OBSERVE a notification bar with these traits:
+Once both add-ons are installed, click the browserAction icon for the Shield Study Helper (it's a black shield with the letters "QA" written over it). Search through the timestamps for the correct date and time and observe the pings that have been sent:
 
-    *  Icon is 'heartbeat'
-    *  Text is one of 8 selected "questions", such as:  "Do you like Firefox?".  These are listed in [./addon/Config.jsm] as the variable `weightedVariations`.
-    *  clickable buttons with labels 'yes | not sure | no'  OR 'no | not sure | yes' (50/50 chance of each)
-    *  an `x` button at the right that closes the notice.
-
-    Test fails IF:
-
-    - there is no bar.
-    - elements are not correct or are not displayed
-
-
-2.  UI functionality: VOTE
-
-    Expect:  Click on a 'vote' button (any of: `yes | not sure | no`) has all these effects
-
-    - notice closes
-    - addon uninstalls
-    - no additional tabs open
-    - telemetry pings are 'correct' with this SPECIFIC `study_state` as the ending
-
-        - ending is `voted`
-        - 'vote' is correct.
-
-3.  UI functionality: 'X' button
-
-    Click on the 'x' button.
-
-    - notice closes
-    - addon uninstalls
-    - no additional tabs open
-    - telemetry pings are 'correct' with this SPECIFIC ending
-
-      - ending is `notification-x`
-
-4.  UI functionality  'close window'
-
-    1.  Open a 2nd firefox window.
-    2.  Close the initial window.
-
-    Then observe:
-
-    - notice closes
-    - addon uninstalls
-    - no additional tabs open
-    - telemetry pings are 'correct' with this SPECIFIC ending
-
-      - ending is `window-or-fx-closed`
-
-
----
-## Helper code and tips
-
-### ***To open a Chrome privileged console***
-
-1.  `about:addons`
-2.  `Tools > web developer console`
-
-Or use other methods, like Scratchpad.
-
-
-### **Telemetry Ping Printing Helper Code**
-
-```javascript
-async function printPings() {
-  async function getTelemetryPings (options) {
-    // type is String or Array
-    const {type, n, timestamp, headersOnly} = options;
-    Components.utils.import("resource://gre/modules/TelemetryArchive.jsm");
-    // {type, id, timestampCreated}
-    let pings = await TelemetryArchive.promiseArchivedPingList();
-    if (type) {
-      if (!(type instanceof Array)) {
-        type = [type];  // Array-ify if it's a string
-      }
-    }
-    if (type) pings = pings.filter(p => type.includes(p.type));
-    if (timestamp) pings = pings.filter(p => p.timestampCreated > timestamp);
-
-    pings.sort((a, b) => b.timestampCreated - a.timestampCreated);
-    if (n) pings = pings.slice(0, n);
-    const pingData = headersOnly ? pings : pings.map(ping => TelemetryArchive.promiseArchivedPingById(ping.id));
-    return Promise.all(pingData)
-  }
-  async function getPings() {
-    const ar = ["shield-study", "shield-study-addon"];
-    return getTelemetryPings({type: ["shield-study", "shield-study-addon"]});
-  }
-
-  const pings = (await getPings()).reverse();
-  const p0 = pings[0].payload;
-  // print common fields
-  console.log(
-    `
-// common fields
-
-branch        ${p0.branch}        // should describe Question text
-study_name    ${p0.study_name}
-addon_version ${p0.addon_version}
-version       ${p0.version}
-
-    `
-  )
-
-  pings.forEach(p=>{
-    console.log(p.creationDate, p.payload.type);
-    console.log(JSON.stringify(p.payload.data,null,2))
-  })
-}
-
-printPings()
+### Example telemetry pings after successfully installing the add-on:
 
 ```
+1 2018-03-03T23:10:40.340Z shield-study
+{
+  "study_state": "enter"
+}
 
+2 2018-03-03T23:10:40.344Z shield-study
+{
+  "study_state": "installed"
+}
+```
 
-### Example sequence for a 'voted => not sure' interaction
+### Example telemetry pings for a common user flow, ending with "expired"
 
-See [TELEMETRY.md](./TELEMETRY.md), EXAMPLE SEQUENCE section at the bottom.
+*Setup*
+* BEFORE installing the study:
+  - First install the Shield Study Helper Add-on as described [above](https://github.com/biancadanforth/tracking-protection-shield-study/blob/master/TESTPLAN.md#how-to-view-telemetry-pings).
+  - Set the study treatment override string preference, `extensions.tracking_protection_messaging_study.variation_override` to `private`.
+  - Set the study expiration override integer preference, `extensions.tracking_protection_messaging_study.duration_override` to `10000` (10 seconds).
+* Install the addon per the [instructions](https://github.com/biancadanforth/tracking-protection-shield-study/blob/master/TESTPLAN.md#preparations) in this document.
+
+*Flow*
+Important: This assumes you start with a clean profile.
+1. Navigate to "npr.org".
+2. Notice the intro panel.
+3. On the intro panel, click "Disable Protection".
+4. On the confirmation screen, click "Cancel".
+5. With the intro panel still open, open a new tab in the same window.
+6. Notice the intro panel gets dismissed.
+7. On the new tab page, notice the message "Firefox has blocked X trackers and Y advertisements." Note the values of X and Y.
+8. Switch back to the original tab with "npr.org"
+9. Notice the badge on the pageAction button. Its value should match X from the new tab page.
+9. Click the pageAction button.
+10. Notice the pageAction panel. The values on the pageAction panel should match X and Y from the new tab page.
+11. Click off of the pageAction panel.
+12. Notice the panel gets dismissed.
+13. Leaving the "npr.org" tab opened, close the new tab page tab.
+14. Wait for about 30 seconds, just to make sure the study does indeed expire.
+15. Close out of Unbranded Beta Firefox completely.
+16. Re-launch Unbranded Beta Firefox.
+17. Notice a survey opens in a new tab. The survey tab should not be focused.
+18. Go to `about:addons`.
+19. Notice the study is gone, but the Shield Study Helper Add-on is still around.
+20. Click the Shield Study Helper Add-on browserAction on the top right corner of the browser window (black shield with "QA" written on it).
+21. If you started with a clean profile, you should see the telemetry pings sent by the study from the first session and the current session.
+22. Verify the pings match the pings below:
+  - Note: The addon version and dates/times may differ.
+
+```
+Ran at: Sat Mar 03 2018 17:03:25 GMT-0800 (PST)
+
+// common fields
+branch private // should describe Question text
+study_name trackingProtectionMessagingExperiment
+addon_version 1.0.1
+version 3
+
+0 2018-03-04T01:00:25.202Z shield-study
+{
+  "study_state": "enter"
+}
+
+1 2018-03-04T01:00:25.206Z shield-study
+{
+  "study_state": "installed"
+}
+
+2 2018-03-04T01:00:33.632Z shield-study-addon
+{
+  "attributes": {
+    "message_type": "event",
+    "event": "panel-shown",
+    "panel_type": "intro-panel"
+  }
+}
+
+3 2018-03-04T01:00:37.416Z shield-study-addon
+{
+  "attributes": {
+    "message_type": "event",
+    "event": "ui-event",
+    "ui_event": "introduction-reject"
+  }
+}
+
+4 2018-03-04T01:00:41.176Z shield-study-addon
+{
+  "attributes": {
+    "message_type": "event",
+    "event": "ui-event",
+    "ui_event": "introduction-confirmation-cancel"
+  }
+}
+
+5 2018-03-04T01:00:45.714Z shield-study-addon
+{
+  "attributes": {
+    "message_type": "event",
+    "event": "panel-hidden",
+    "panel_type": "intro-panel",
+    "showTime": "12"
+  }
+}
+
+6 2018-03-04T01:00:45.722Z shield-study-addon
+{
+  "attributes": {
+    "message_type": "event",
+    "event": "panel-dismissed",
+    "panel_type": "introduction-panel",
+    "reason": "tab-change"
+  }
+}
+
+7 2018-03-04T01:01:13.790Z shield-study-addon
+{
+  "attributes": {
+    "message_type": "event",
+    "event": "page-action-click",
+    "counter": "37",
+    "is_intro": "false",
+    "treatment": "private"
+  }
+}
+
+8 2018-03-04T01:01:13.992Z shield-study-addon
+{
+  "attributes": {
+    "message_type": "event",
+    "event": "panel-shown",
+    "panel_type": "page-action-panel"
+  }
+}
+
+9 2018-03-04T01:01:19.076Z shield-study-addon
+{
+  "attributes": {
+    "message_type": "event",
+    "event": "panel-hidden",
+    "panel_type": "page-action-panel",
+    "showTime": "5"
+  }
+}
+
+10 2018-03-04T01:01:19.080Z shield-study-addon
+{
+  "attributes": {
+    "message_type": "event",
+    "event": "panel-dismissed",
+    "panel_type": "page-action-panel",
+    "reason": "user-clicked-off-panel"
+  }
+}
+
+11 2018-03-04T01:01:26.066Z shield-study-addon
+{
+  "attributes": {
+    "message_type": "event",
+    "event": "new-tab-closed",
+    "newTabOpenTime": "40"
+  }
+}
+
+12 2018-03-04T01:02:17.330Z shield-study
+{
+  "study_state": "expired"
+}
+
+13 2018-03-04T01:02:17.334Z shield-study
+{
+  "study_state": "exit"
+}
+
+14 2018-03-04T01:02:17.598Z shield-study-addon
+{
+  "attributes": {
+    "message_type": "behavior_summary",
+    "reject": "false",
+    "intro_accept": "false",
+    "intro_reject": "false",
+    "badge_clicks": "1",
+    "panel_open_times": "[12,5]",
+    "panel_open_times_median": "8.5",
+    "panel_open_times_mean": "8.5",
+    "new_tab_open_times": "[40]",
+    "new_tab_open_times_median": "40",
+    "new_tab_open_times_mean": "40",
+    "page_action_counter": "[37]",
+    "page_action_counter_median": "37",
+    "page_action_counter_mean": "37",
+    "covariates_profile_age": "0",
+    "covariates_dnt_enabled": "false",
+    "covariates_history_enabled": "true",
+    "covariates_app_update_enabled": "true",
+    "covariates_has_adblocker": "false"
+  }
+}
+
+```

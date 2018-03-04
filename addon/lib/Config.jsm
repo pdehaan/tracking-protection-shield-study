@@ -78,7 +78,7 @@ const config = {
     },
     "telemetry": {
       "send": true, // assumed false. Actually send pings?
-      "removeTestingFlag": false,  // Marks pings as testing, set true for actual release
+      "removeTestingFlag": true,  // Marks pings as testing, set true for actual release
     },
   },
 
@@ -112,7 +112,6 @@ const config = {
   },
 
   /* Study branches and sample weights */
-  // TODO bdanforth: Finalize branches and weights
   "weightedVariations": [
     // Built-in TP ON in Private Windows only, no study UI
     {"name": "control",

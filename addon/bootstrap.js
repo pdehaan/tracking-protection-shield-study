@@ -260,6 +260,7 @@ this.Bootstrap = {
     Cu.unload(`resource://${STUDY}/lib/Feature.jsm`);
     Cu.unload(`resource://${STUDY}/lib/Config.jsm`);
     Cu.unload(`resource://${STUDY}/lib/StudyUtils.jsm`);
+    Cu.unload(`resource://${STUDY}/lib/Storage.jsm`);
   },
 
   uninstall() {

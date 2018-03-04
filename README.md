@@ -24,20 +24,37 @@ Users are ineligible for the study if:
 
 ## User Flow
 
+See top of [README](https://github.com/biancadanforth/tracking-protection-shield-study#about-this-study) for UX mocks.
+
 1. (Fast and Private branches only) For the first webpage the user visits with blocked resources, a pageAction icon will appear, displaying an introductory panel.
 2. (Fast and Private branches only) For every subsequent webpage the user visits with blocked resources, the pageAction badge will display:
 - The amount of time saved in seconds (Fast)
 - The number of blocked resources (Private)
-If the user clicks on the pageAction icon, a panel will open with more information.
-3. (Fast and Private branches only) When the user visits `about:newtab` or `about:home`, a message on the page will display per-session totals for:
+3. If the user clicks on the pageAction icon, a panel will open with more information.
+4. (Fast and Private branches only) When the user visits `about:newtab` or `about:home`, a message on the page will display per-session totals for:
 - number of blocked resources AND
 - time saved per session (Fast) OR
 - number of tracking companies blocked (Private)
-4. (All branches) If the study is still running after two weeks, the study will end, restoring Tracking Protection to its default setting and opening a new tab to a survey.
+5. (All branches) If the study is still running after two weeks, the study will end, restoring Tracking Protection to its default setting and opening a new tab to a survey.
 
 ### Notes
 * (Fast and Private branches only) If the user disables Tracking Protection from either the introduction panel or the subsequent pageAction panel, the study will end.
 * (All branches) If at any time during the study the user modifies their Tracking Protection setting, the study will end.
+
+### Study Endings
+
+All study endings _except_ `"ineligible"` have a survey at the end of the study.
+
+**Standard endings**
+* reason = `"user-disable"`: User has uninstalled the addon from `about:addons`
+* reason = `"expired"`: Study has expired.
+* reason = `"ineligible"`: User is ineligible for the study as determined by the `Config.study.isEligible()`. See [Eligibility](https://github.com/biancadanforth/tracking-protection-shield-study#eligibility) in the README.
+
+**Study-specific endings**
+* reason= `"user-disabled-builtin-tracking-protection"`: User has lowered the level of Tracking Protection compared to their treatment branch from `about:preferences` or `about:config`.
+* reason = `"user-enabled-builtin-tracking-protection"`: User has raised the level of Tracking Protection compared to their treatment branch from `about:preferences` or `about:config`.
+* reason = `"introduction-confirmation-leave-study"`: User has opted to disable Tracking Protection from the Introduction panel confirmation screen.
+* reason = `"page-action-confirmation-leave-study"`: User has opted to disable Tracking Protection from the page action panel confirmation screen.
 
 ## Testing Preferences
 The following preferences can be set to customize the study behavior for testing purposes.
@@ -46,7 +63,7 @@ The following preferences can be set to customize the study behavior for testing
   <dt><code>extensions.tracking_protection_messaging_study.variation_override</code></dt>
   <dd>The treatment to use. Set this to a value from the Treatment Branches section to force the add-on to show you that treatment. You must set this preference before installing the study (default: random).</dd>
 
-  <dt><code>extensions.tracking_protection_messaging_study.duration</code></dt>
+  <dt><code>extensions.tracking_protection_messaging_study.duration_override</code></dt>
   <dd>The the duration of the study (default: <code>1209600000</code>ms or 2 weeks).</dd>
 </dl>
 
