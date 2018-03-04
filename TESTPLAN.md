@@ -101,7 +101,7 @@ Once both add-ons are installed, click the browserAction icon for the Shield Stu
 
 ### Example telemetry pings after successfully installing the add-on:
 
-```json
+```
 1 2018-03-03T23:10:40.340Z shield-study
 {
   "study_state": "enter"
@@ -149,7 +149,7 @@ Important: This assumes you start with a clean profile.
 22. Verify the pings match the pings below:
   - Note: The addon version and dates/times may differ.
 
-```json
+```
 Ran at: Sat Mar 03 2018 17:03:25 GMT-0800 (PST)
 
 // common fields

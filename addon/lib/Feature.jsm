@@ -1317,6 +1317,7 @@ class Feature {
     Cu.unload(`resource://${STUDY}/lib/BlockLists.jsm`);
     Cu.unload(`resource://${STUDY}/lib/CleanupManager.jsm`);
     Cu.unload(`resource://${STUDY}/lib/WindowWatcher.jsm`);
+    Cu.unload(`resource://${STUDY}/lib/Storage.jsm`);
   }
 
   resetBuiltInTrackingProtection() {
