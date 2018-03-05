@@ -104,7 +104,7 @@ class Feature {
     this.PANEL_ID = "tracking-protection-study-intro-panel";
 
     // Estimating # blocked ads as a percentage of # blocked resources
-    this.MAX_AD_FRACTION = 0.045;
+    this.MAX_AD_FRACTION = 0.065;
     this.MIN_AD_FRACTION = 0.015;
     // Estimating time saved as a percentage of # blocked resources
     this.MAX_TIME_SAVED_FRACTION = 0.0275;
@@ -1075,7 +1075,7 @@ class Feature {
       // Block third-party requests only.
       if (currentHost !== host
         && blocklists.hostInBlocklist(this.lists.blocklist, host)) {
-        let counter = this.state.blockedResources.get(details.browser) || 0;
+        let counter = this.state.blockedResources.get(browser) || 0;
 
         const rootDomainHost = this.getRootDomain(host);
         const rootDomainCurrentHost = this.getRootDomain(currentHost);
@@ -1101,24 +1101,24 @@ class Feature {
         // If we get this far, we're going to block the request
         counter++;
         this.state.totalBlockedResources += 1;
-        this.state.blockedResources.set(details.browser, counter);
+        this.state.blockedResources.set(browser, counter);
         // Calculate time saved
         const timeSavedFraction =
           Math.random() * (this.MAX_TIME_SAVED_FRACTION - this.MIN_TIME_SAVED_FRACTION) + this.MIN_TIME_SAVED_FRACTION;
         const timeSavedThisRequest = timeSavedFraction * counter * 1000;
-        const timeSavedLastRequest = this.state.timeSaved.get(details.browser) || 0;
+        const timeSavedLastRequest = this.state.timeSaved.get(browser) || 0;
         if (timeSavedThisRequest > timeSavedLastRequest) {
-          this.state.timeSaved.set(details.browser, timeSavedThisRequest);
+          this.state.timeSaved.set(browser, timeSavedThisRequest);
           this.state.totalTimeSaved -= Math.ceil(timeSavedLastRequest / 1000);
           this.state.totalTimeSaved += Math.ceil(timeSavedThisRequest / 1000);
         }
         // Calculate ads blocked
         const adsBlockedFraction =
           Math.random() * (this.MAX_AD_FRACTION - this.MIN_AD_FRACTION) + this.MIN_AD_FRACTION;
-        const adsBlockedLastRequest = this.state.blockedAds.get(details.browser) || 0;
+        const adsBlockedLastRequest = this.state.blockedAds.get(browser) || 0;
         const adsBlockedThisRequest = Math.floor(adsBlockedFraction * counter);
         if (adsBlockedThisRequest > adsBlockedLastRequest) {
-          this.state.blockedAds.set(details.browser, adsBlockedThisRequest);
+          this.state.blockedAds.set(browser, adsBlockedThisRequest);
           this.state.totalBlockedAds -= adsBlockedLastRequest;
           this.state.totalBlockedAds += adsBlockedThisRequest;
         }
@@ -1128,12 +1128,15 @@ class Feature {
           blockedAds: this.state.totalBlockedAds,
           newTabMessage: this.newTabMessages[this.treatment],
         });
-        // If the pageAction panel is showing, update the quantities dynamically
-        if (this.state.pageActionPanelIsShowing) {
+        // If the pageAction panel is showing, and the tab is the topmost/active tab,
+        // update the quantities dynamically
+        const win = browser.ownerGlobal;
+        if (this.state.pageActionPanelIsShowing
+          && browser === win.gBrowser.selectedBrowser) {
           const firstQuantity = counter;
           const secondQuantity = this.treatment === "fast"
-            ? this.state.timeSaved.get(details.browser) || 0
-            : this.state.blockedAds.get(details.browser) || 0;
+            ? this.state.timeSaved.get(browser) || 0
+            : this.state.blockedAds.get(browser) || 0;
           this.weakEmbeddedBrowser.get().contentWindow.wrappedJSObject
             .updateTPNumbers(JSON.stringify({
               treatment: this.treatment,
@@ -1144,25 +1147,26 @@ class Feature {
 
         const enumerator = Services.wm.getEnumerator("navigator:browser");
         while (enumerator.hasMoreElements()) {
-          const win = enumerator.getNext();
+          const currentWin = enumerator.getNext();
           // Mac OS has an application window that keeps running even if all
           // normal Firefox windows are closed.
           // Since WebRequest.onBeforeRequest isn't a window listener, we
           // have to check for PB mode here too.
-          if (win === Services.appShell.hiddenDOMWindow
-            || PrivateBrowsingUtils.isWindowPrivate(win)) {
+          if (currentWin === Services.appShell.hiddenDOMWindow
+            || PrivateBrowsingUtils.isWindowPrivate(currentWin)) {
             continue;
           }
 
-          // only update pageAction with new blocked requests if we're in the
-          // "private" treatment branch, otherwise we want to display timeSaved
-          // for the "fast" treatment branch
-          if (details.browser === win.gBrowser.selectedBrowser) {
+          // Make sure the <browser> is the topmost/active tab in the window
+          if (browser === currentWin.gBrowser.selectedBrowser) {
+            // only update pageAction with new blocked requests if we're in the
+            // "private" treatment branch, otherwise we want to display timeSaved
+            // for the "fast" treatment branch
             const badgeValue = this.treatment === "private"
               ? counter
-              : this.state.timeSaved.get(details.browser) || 0;
-            this.showPageAction(browser.getRootNode(), win);
-            this.setPageActionCounter(browser.getRootNode(), badgeValue, win);
+              : this.state.timeSaved.get(browser) || 0;
+            this.showPageAction(browser.getRootNode(), currentWin);
+            this.setPageActionCounter(browser.getRootNode(), badgeValue, currentWin);
           }
         }
         return BLOCK_THE_REQUEST;
