@@ -102,10 +102,13 @@ class Feature {
     this.PREF_TP_ENABLED_IN_PRIVATE_WINDOWS = "privacy.trackingprotection.pbmode.enabled";
     this.PAGE_ACTION_BUTTON_ID = "tracking-protection-study-button";
     this.PANEL_ID = "tracking-protection-study-intro-panel";
+
     // Estimating # blocked ads as a percentage of # blocked resources
-    this.AD_FRACTION = 0.1;
-    // Time saved per page will never exceed this fraction of # blocked resources
-    this.MAX_TIME_SAVED_FRACTION = 0.075;
+    this.MAX_AD_FRACTION = 0.045;
+    this.MIN_AD_FRACTION = 0.015;
+    // Estimating time saved as a percentage of # blocked resources
+    this.MAX_TIME_SAVED_FRACTION = 0.0275;
+    this.MIN_TIME_SAVED_FRACTION = 0.005;
 
     this.onTabChangeRef = this.onTabChange.bind(this);
     this.handlePageActionButtonCommandRef = this.handlePageActionButtonCommand.bind(this);
@@ -1097,20 +1100,28 @@ class Feature {
 
         // If we get this far, we're going to block the request
         counter++;
+        this.state.totalBlockedResources += 1;
         this.state.blockedResources.set(details.browser, counter);
-        const timeSavedThisRequest = Math.min(Math.random() * (counter) * 1000, this.MAX_TIME_SAVED_FRACTION * counter * 1000);
+        // Calculate time saved
+        const timeSavedFraction =
+          Math.random() * (this.MAX_TIME_SAVED_FRACTION - this.MIN_TIME_SAVED_FRACTION) + this.MIN_TIME_SAVED_FRACTION;
+        const timeSavedThisRequest = timeSavedFraction * counter * 1000;
         const timeSavedLastRequest = this.state.timeSaved.get(details.browser) || 0;
         if (timeSavedThisRequest > timeSavedLastRequest) {
-          this.state.timeSaved.set(details.browser, timeSavedThisRequest);
+          this.state.timeSaved.set(details.browser, Math.ceil(timeSavedThisRequest));
           this.state.totalTimeSaved -= Math.ceil(timeSavedLastRequest / 1000);
           this.state.totalTimeSaved += Math.ceil(timeSavedThisRequest / 1000);
         }
-        this.state.totalBlockedResources += 1;
+        // Calculate ads blocked
+        const adsBlockedFraction =
+          Math.random() * (this.MAX_AD_FRACTION - this.MIN_AD_FRACTION) + this.MIN_AD_FRACTION;
         const adsBlockedLastRequest = this.state.blockedAds.get(details.browser) || 0;
-        const adsBlockedThisRequest = Math.floor(this.AD_FRACTION * counter);
-        this.state.totalBlockedAds -= Math.floor(adsBlockedLastRequest);
-        this.state.totalBlockedAds += Math.floor(adsBlockedThisRequest);
-        this.state.blockedAds.set(details.browser, Math.floor(this.AD_FRACTION * counter));
+        const adsBlockedThisRequest = adsBlockedFraction * counter;
+        if (adsBlockedThisRequest > adsBlockedLastRequest) {
+          this.state.blockedAds.set(details.browser, Math.floor(adsBlockedThisRequest));
+          this.state.totalBlockedAds -= Math.floor(adsBlockedLastRequest);
+          this.state.totalBlockedAds += Math.floor(adsBlockedThisRequest);
+        }
         Services.mm.broadcastAsyncMessage("TrackingStudy:UpdateContent", {
           blockedResources: this.state.totalBlockedResources,
           timeSaved: this.state.totalTimeSaved,
