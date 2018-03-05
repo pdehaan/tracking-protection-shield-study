@@ -1108,7 +1108,7 @@ class Feature {
         const timeSavedThisRequest = timeSavedFraction * counter * 1000;
         const timeSavedLastRequest = this.state.timeSaved.get(details.browser) || 0;
         if (timeSavedThisRequest > timeSavedLastRequest) {
-          this.state.timeSaved.set(details.browser, Math.ceil(timeSavedThisRequest));
+          this.state.timeSaved.set(details.browser, timeSavedThisRequest);
           this.state.totalTimeSaved -= Math.ceil(timeSavedLastRequest / 1000);
           this.state.totalTimeSaved += Math.ceil(timeSavedThisRequest / 1000);
         }
@@ -1116,11 +1116,11 @@ class Feature {
         const adsBlockedFraction =
           Math.random() * (this.MAX_AD_FRACTION - this.MIN_AD_FRACTION) + this.MIN_AD_FRACTION;
         const adsBlockedLastRequest = this.state.blockedAds.get(details.browser) || 0;
-        const adsBlockedThisRequest = adsBlockedFraction * counter;
+        const adsBlockedThisRequest = Math.floor(adsBlockedFraction * counter);
         if (adsBlockedThisRequest > adsBlockedLastRequest) {
-          this.state.blockedAds.set(details.browser, Math.floor(adsBlockedThisRequest));
-          this.state.totalBlockedAds -= Math.floor(adsBlockedLastRequest);
-          this.state.totalBlockedAds += Math.floor(adsBlockedThisRequest);
+          this.state.blockedAds.set(details.browser, adsBlockedThisRequest);
+          this.state.totalBlockedAds -= adsBlockedLastRequest;
+          this.state.totalBlockedAds += adsBlockedThisRequest;
         }
         Services.mm.broadcastAsyncMessage("TrackingStudy:UpdateContent", {
           blockedResources: this.state.totalBlockedResources,

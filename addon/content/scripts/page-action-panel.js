@@ -57,6 +57,7 @@ class PageActionPanel {
   // it does not live update the values
   addCustomContent() {
     this.pageActionFirstQuantity.innerText = this.msg.firstQuantity;
+    this.prevFirstQuantity = this.msg.firstQuantity;
     let secondQuantityMessage = this.msg.pageActionQuantities;
     // convert time units
     const { timeSaved, timeUnit } = this.getHumanReadableTime(this.msg.secondQuantity);
@@ -122,7 +123,13 @@ class PageActionPanel {
 
   updateNumbers(quantities) {
     quantities = JSON.parse(quantities);
-    const firstQuantity = quantities.firstQuantity;
+    let firstQuantity = this.prevFirstQuantity;
+    // Make sure another page's values don't
+    // make the # blocked resources go below its current value
+    if (quantities.firstQuantity > this.prevFirstQuantity) {
+      firstQuantity = quantities.firstQuantity;
+      this.prevFirstQuantity = quantities.firstQuantity;
+    }
     const { timeSaved, timeUnit } = this.getHumanReadableTime(quantities.secondQuantity);
     const blockedAds = quantities.secondQuantity;
     this.pageActionFirstQuantity.innerText = firstQuantity;
